@@ -30,11 +30,10 @@ impl AnalysisResult {
     }
 }
 
-/// Analyze an audio chunk (mono f32 samples at 44100 Hz).
-/// Returns chord name, confidence, and BPM estimate.
+/// Analyze an audio chunk with explicit sample rate.
 #[wasm_bindgen]
-pub fn analyze_chunk(samples: &[f32]) -> AnalysisResult {
-    let chroma = chroma::compute_chroma(samples);
+pub fn analyze_chunk(samples: &[f32], sample_rate: f32) -> AnalysisResult {
+    let chroma = chroma::compute_chroma_sr(samples, sample_rate);
     let chord_result = chord::estimate_chord(&chroma);
     let bpm = beat::estimate_bpm(samples);
 
@@ -47,8 +46,8 @@ pub fn analyze_chunk(samples: &[f32]) -> AnalysisResult {
 
 /// Analyze chord only (lighter, for frequent calls).
 #[wasm_bindgen]
-pub fn analyze_chord(samples: &[f32]) -> AnalysisResult {
-    let chroma = chroma::compute_chroma(samples);
+pub fn analyze_chord(samples: &[f32], sample_rate: f32) -> AnalysisResult {
+    let chroma = chroma::compute_chroma_sr(samples, sample_rate);
     let chord_result = chord::estimate_chord(&chroma);
 
     AnalysisResult {

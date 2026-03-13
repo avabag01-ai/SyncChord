@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncChord — YouTube 실시간 코드 분석</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e1e1e1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      width: 100%;
+      max-width: 900px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      background: linear-gradient(135deg, #ff6b35, #f7c948);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-sub { color: #888; font-size: 0.85rem; }
+
+    .url-bar {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 12px;
+    }
+    .url-bar input {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #3a3a5a;
+      background: #1a1a2e;
+      color: #e1e1e1;
+      font-size: 0.9rem;
+    }
+    .url-bar input::placeholder { color: #666; }
+    .url-bar button {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #ff6b35, #e85d26);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .presets {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .preset-btn {
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      border-radius: 14px;
+      background: #111;
+      border: 1px solid #2a2a4a;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .preset-btn:hover { border-color: #ff6b35; color: #ff6b35; }
+
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 12px 12px 0 0;
+      overflow: hidden;
+    }
+    .player-wrapper iframe { width: 100%; height: 100%; border: none; }
+    .placeholder {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #555; gap: 12px;
+    }
+    .placeholder-icon { font-size: 4rem; }
+
+    .conf-bar {
+      height: 3px; background: #2a2a4a;
+      width: 100%; max-width: 900px; overflow: hidden;
+    }
+    .conf-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff6b35, #f7c948);
+      width: 0%; transition: width 0.15s;
+    }
+
+    .chord-overlay {
+      width: 100%; max-width: 900px;
+      background: rgba(15,15,15,0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid #2a2a4a;
+      border-top: 2px solid #ff6b35;
+      border-radius: 0 0 12px 12px;
+      padding: 10px 16px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .chord-strip {
+      display: flex; gap: 4px; flex: 1; overflow: hidden;
+    }
+    .chord-cell {
+      flex-shrink: 0; width: 60px; height: 44px;
+      border-radius: 6px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 1.05rem; font-weight: 700;
+      background: #1a1a2e; border: 1px solid #2a2a4a;
+      transition: all 0.2s; color: #aaa;
+    }
+    .chord-cell.active {
+      background: linear-gradient(135deg, #ff6b35, #e85d26);
+      border-color: #ff6b35; color: #fff;
+      transform: scale(1.08);
+      box-shadow: 0 0 16px rgba(255,107,53,0.4);
+    }
+    .chord-cell.next { border-color: #f7c948; color: #f7c948; }
+    .chord-cell small { font-size: 0.5rem; font-weight: 400; opacity: 0.6; }
+
+    .metro-mini {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 4px; min-width: 90px;
+    }
+    .metro-dots { display: flex; gap: 5px; }
+    .metro-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #2a2a4a; transition: all 0.08s;
+    }
+    .metro-dot.on {
+      background: #f7c948;
+      box-shadow: 0 0 8px rgba(247,201,72,0.6);
+    }
+    .bpm-label { font-size: 0.8rem; font-weight: 700; color: #f7c948; }
+    .bpm-label small { font-weight: 400; color: #888; }
+
+    .sync-badge {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 8px; border-radius: 14px;
+      background: #1a1a2e; font-size: 0.7rem;
+      color: #888; border: 1px solid #2a2a4a;
+    }
+    .sync-badge.connected { border-color: #4ade80; color: #4ade80; }
+    .sync-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #555;
+    }
+    .sync-dot.on { background: #4ade80; }
+
+    .bottom-panel {
+      width: 100%; max-width: 900px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-top: 16px;
+    }
+    .panel-card {
+      background: #1a1a2e; border: 1px solid #2a2a4a;
+      border-radius: 12px; padding: 14px;
+    }
+    .panel-card h3 { font-size: 0.8rem; color: #f7c948; margin-bottom: 8px; }
+    .ctrl-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    button {
+      padding: 7px 12px; border-radius: 6px;
+      border: 1px solid #3a3a5a; background: #2a2a4a;
+      color: #e1e1e1; font-size: 0.8rem; cursor: pointer;
+    }
+    button:hover { border-color: #ff6b35; }
+    button.primary {
+      background: linear-gradient(135deg,#ff6b35,#e85d26);
+      border-color: #ff6b35; color: #fff; font-weight: 600;
+    }
+    .room-input {
+      padding: 7px 8px; border-radius: 6px;
+      border: 1px solid #3a3a5a; background: #111;
+      color: #e1e1e1; font-size: 0.8rem;
+      width: 100px; text-align: center;
+      letter-spacing: 3px; font-weight: 600;
+    }
+    .room-input::placeholder { letter-spacing: 0; font-weight: 400; }
+    .status-row {
+      display: flex; align-items: center; gap: 5px;
+      margin-top: 8px; font-size: 0.7rem; color: #666;
+    }
+    .st-dot { width: 6px; height: 6px; border-radius: 50%; background: #555; }
+    .st-dot.ok { background: #4ade80; }
+    .st-dot.err { background: #f87171; }
+    .users-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+    .user-chip {
+      padding: 2px 8px; border-radius: 10px;
+      background: #2a2a4a; font-size: 0.65rem;
+    }
+    .user-chip.host { border: 1px solid #f7c948; }
+    .log-box {
+      background: #111; border-radius: 6px; padding: 8px;
+      max-height: 140px; overflow-y: auto;
+      font-family: 'SF Mono','Fira Code',monospace;
+      font-size: 0.7rem; line-height: 1.5; color: #666;
+    }
+    .log-box .info { color: #4ade80; }
+    .log-box .warn { color: #f7c948; }
+    .log-box .error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>SyncChord</h1>
+    <span class="header-sub">YouTube 실시간 코드 인식 + 싱크 합주</span>
+  </div>
+
+  <div class="url-bar">
+    <input type="text" id="urlInput" placeholder="YouTube URL 붙여넣기 (예: https://www.youtube.com/watch?v=...)">
+    <button class="primary" id="btnLoad">▶ 분석 시작</button>
+  </div>
+
+  <div class="presets">
+    <button class="preset-btn" data-id="5qap5aO4i9A">🎸 lofi hip hop</button>
+    <button class="preset-btn" data-id="60ItHLz5WEA">🎵 Alan Walker - Faded</button>
+    <button class="preset-btn" data-id="YQHsXMglC9A">🎶 Adele - Hello</button>
+    <button class="preset-btn" data-id="LDU_Txk06tM">🎹 Jamiroquai</button>
+  </div>
+
+  <div class="player-wrapper" id="playerWrapper">
+    <div class="placeholder">
+      <div class="placeholder-icon">🎸</div>
+      <div>YouTube URL을 입력하거나 프리셋을 클릭하세요</div>
+    </div>
+  </div>
+  <div class="conf-bar"><div class="conf-fill" id="confFill"></div></div>
+
+  <div class="chord-overlay">
+    <div class="chord-strip" id="chordStrip">
+      <div class="chord-cell" id="c0"><span>-</span></div>
+      <div class="chord-cell" id="c1"><span>-</span></div>
+      <div class="chord-cell active" id="c2"><span>-</span><small>now</small></div>
+      <div class="chord-cell next" id="c3"><span>-</span></div>
+      <div class="chord-cell" id="c4"><span>-</span></div>
+      <div class="chord-cell" id="c5"><span>-</span></div>
+      <div class="chord-cell" id="c6"><span>-</span></div>
+      <div class="chord-cell" id="c7"><span>-</span></div>
+      <div class="chord-cell" id="c8"><span>-</span></div>
+      <div class="chord-cell" id="c9"><span>-</span></div>
+    </div>
+    <div class="metro-mini">
+      <div class="metro-dots">
+        <div class="metro-dot" id="md1"></div>
+        <div class="metro-dot" id="md2"></div>
+        <div class="metro-dot" id="md3"></div>
+        <div class="metro-dot" id="md4"></div>
+      </div>
+      <div class="bpm-label"><span id="bpmVal">120</span> <small>BPM</small></div>
+    </div>
+    <div class="sync-badge" id="syncBadge">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">오프라인</span>
+    </div>
+  </div>
+
+  <div class="bottom-panel">
+    <div class="panel-card">
+      <h3>🎛 컨트롤</h3>
+      <div class="ctrl-row">
+        <button class="primary" id="btnSystem">🔊 오디오 캡처</button>
+        <button id="btnMic">🎤 마이크</button>
+        <button id="btnMetro">▶ 메트로놈</button>
+        <button id="bpmDn">-5</button>
+        <button id="bpmUp">+5</button>
+      </div>
+      <div class="ctrl-row" style="margin-top:8px">
+        <button class="primary" id="btnCreate">방 만들기</button>
+        <input class="room-input" id="roomInput" placeholder="코드" maxlength="6">
+        <button id="btnJoin">참가</button>
+      </div>
+      <div class="status-row">
+        <div class="st-dot" id="wasmDot"></div>
+        <span id="wasmLabel">WASM 대기...</span>
+      </div>
+      <div class="users-row" id="usersList"></div>
+    </div>
+    <div class="panel-card">
+      <h3>📋 로그</h3>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    const logBox = document.getElementById('logBox');
+    function log(msg, cls='info') {
+      const t = new Date().toLocaleTimeString();
+      logBox.innerHTML += `<div class="${cls}">[${t}] ${msg}</div>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    let wasm = null;
+    async function loadWasm() {
+      try {
+        const mod = await import('../extension/wasm/syncchord_wasm.js');
+        await mod.default();
+        wasm = mod;
+        document.getElementById('wasmDot').classList.add('ok');
+        document.getElementById('wasmLabel').textContent = 'WASM 로드 완료';
+        log('Rust WASM 엔진 로드 성공');
+      } catch(e) {
+        document.getElementById('wasmDot').classList.add('err');
+        document.getElementById('wasmLabel').textContent = 'WASM 실패 (JS 폴백)';
+        log('WASM 실패 — JS 폴백 사용','warn');
+      }
+    }
+
+    const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const MAJ=[1,0,0,0,1,0,0,1,0,0,0,0], MIN=[1,0,0,1,0,0,0,1,0,0,0,0];
+    function jsChroma(fft,sr){
+      const c=new Float32Array(12), bh=sr/(fft.length*2);
+      for(let i=1;i<fft.length;i++){const f=i*bh;if(f<65||f>2100)continue;const p=Math.round(12*Math.log2(f/440)+69)%12;if(p>=0&&p<12)c[p]+=fft[i]*fft[i];}
+      const mx=Math.max(...c,0.001);for(let i=0;i<12;i++)c[i]/=mx;return c;
+    }
+    function jsChord(c){
+      let best='N/C',bs=-1;
+      for(let r=0;r<12;r++)for(const[t,s]of[[MAJ,''],[MIN,'m']]){
+        let d=0,a=0,b=0;for(let i=0;i<12;i++){const v=t[(i-r+12)%12];d+=c[i]*v;a+=c[i]**2;b+=v**2;}
+        const sc=d/(Math.sqrt(a)*Math.sqrt(b)+1e-10);if(sc>bs){bs=sc;best=NOTES[r]+s;}
+      }
+      return{chord:best,confidence:bs};
+    }
+
+    // ── 코드 스무딩: BPM 기반으로 반 마디(2박) 단위로 코드 확정 ──
+    let chordHistory=['-','-','-','-','-','-','-','-','-','-'];
+    let voteBuffer = []; // 반 마디 동안 감지된 코드들
+    let lastChordTime = 0;
+    let currentDisplayChord = '-';
+
+    function getHalfBarMs(){
+      // 반 마디 = 2박 = 2 * (60000/bpm)
+      return 2 * (60000 / bpm);
+    }
+
+    function commitChord(){
+      // 투표: 가장 많이 나온 코드를 확정
+      if(voteBuffer.length === 0) return;
+      const counts = {};
+      let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
+      for(const v of voteBuffer){
+        counts[v.chord] = (counts[v.chord] || 0) + 1;
+        if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
+          bestCount = counts[v.chord];
+          bestChord = v.chord;
+          bestConf = v.confidence;
+        }
+      }
+      // 이전과 같으면 스킵 (불필요한 UI 업데이트 방지)
+      if(bestChord !== currentDisplayChord){
+        currentDisplayChord = bestChord;
+        chordHistory.shift();
+        chordHistory.push(bestChord);
+        renderChordBar(bestConf);
+      }
+      voteBuffer = [];
+    }
+
+    function renderChordBar(conf){
+      for(let i=0;i<10;i++){
+        const el=document.getElementById('c'+i);
+        el.querySelector('span').textContent=chordHistory[i];
+        el.className='chord-cell';
+        const sm=el.querySelector('small');if(sm)sm.remove();
+        if(i===2){el.classList.add('active');const s=document.createElement('small');s.textContent='now';el.appendChild(s);}
+        else if(i===3)el.classList.add('next');
+      }
+      document.getElementById('confFill').style.width=`${(conf*100).toFixed(0)}%`;
+    }
+
+    let audioCtx,analyser,isAnalyzing=false;
+
+    // dB 스펙트럼에서 직접 chroma 계산
+    function chromaFromDB(fftDB, sr){
+      const chroma = new Float64Array(12);
+      const binHz = sr / (fftDB.length * 2);
+      for(let i=1;i<fftDB.length;i++){
+        const freq = i * binHz;
+        if(freq < 65 || freq > 2100) continue;
+        const db = fftDB[i];
+        if(db < -80) continue;
+        const power = Math.pow(10, (db + 80) / 20);
+        const midi = 12 * Math.log2(freq / 440) + 69;
+        const pc = ((Math.round(midi) % 12) + 12) % 12;
+        chroma[pc] += power;
+      }
+      const mx = Math.max(...chroma, 0.001);
+      for(let i=0;i<12;i++) chroma[i] /= mx;
+      return chroma;
+    }
+
+    function doAnalysis(){
+      if(!isAnalyzing)return;
+
+      const timeDomain = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(timeDomain);
+      const fftDB = new Float32Array(analyser.frequencyBinCount);
+      analyser.getFloatFrequencyData(fftDB);
+
+      let res;
+      if(wasm){
+        try{
+          const r = wasm.analyze_chord(timeDomain, audioCtx.sampleRate);
+          res = {chord: r.chord, confidence: r.confidence};
+        }catch(e){
+          const c = chromaFromDB(fftDB, audioCtx.sampleRate);
+          res = jsChord(c);
+        }
+      } else {
+        const c = chromaFromDB(fftDB, audioCtx.sampleRate);
+        res = jsChord(c);
+      }
+
+      // 투표 버퍼에 추가 (confidence 임계값 이상만)
+      if(res.confidence > 0.3){
+        voteBuffer.push(res);
+      }
+
+      // 반 마디 경과 시 코드 확정
+      const now = performance.now();
+      if(now - lastChordTime >= getHalfBarMs()){
+        commitChord();
+        lastChordTime = now;
+      }
+
+      // ~50ms 간격으로 분석 (빠르게 샘플링, 느리게 출력)
+      setTimeout(()=>requestAnimationFrame(doAnalysis), 50);
+    }
+
+    function extractId(url){const m=url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
+
+    let captureStream = null;
+
+    // 시스템 오디오 캡처 (헤드폰 OK, getDisplayMedia)
+    async function startSystemAudio(){
+      if(isAnalyzing)return;
+      try{
+        // 탭 오디오만 캡처 (화면 공유 팝업에서 "탭" 선택)
+        captureStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // 필수 (Chrome 정책), 실제로는 안 씀
+          audio: true  // 시스템/탭 오디오 캡처
+        });
+        audioCtx=new AudioContext();
+        const src=audioCtx.createMediaStreamSource(captureStream);
+        analyser=audioCtx.createAnalyser();analyser.fftSize=4096;
+        src.connect(analyser);
+        // 비디오 트랙은 필요 없으므로 중지
+        captureStream.getVideoTracks().forEach(t=>t.stop());
+        isAnalyzing=true;
+        document.getElementById('btnSystem').textContent='⏹ 캡처 중지';
+        log('🔊 시스템 오디오 캡처 시작 — 헤드폰에서도 분석 가능!');
+        doAnalysis();
+        // 사용자가 공유 중지하면 자동 정지
+        captureStream.getAudioTracks()[0].onended = ()=>{
+          stopAnalysis();
+          log('오디오 캡처 종료됨','warn');
+        };
+      }catch(e){
+        log('시스템 오디오 캡처 실패: '+e.message+' — 공유 팝업에서 "탭 오디오 공유"를 체크하세요','error');
+      }
+    }
+
+    // 마이크 캡처 (폴백)
+    async function startMic(){
+      if(isAnalyzing)return;
+      try{
+        const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        audioCtx=new AudioContext();
+        const src=audioCtx.createMediaStreamSource(stream);
+        analyser=audioCtx.createAnalyser();analyser.fftSize=4096;
+        src.connect(analyser);isAnalyzing=true;
+        document.getElementById('btnMic').textContent='⏹ 중지';
+        log('🎤 마이크 캡처 시작 — 스피커 소리를 분석합니다');
+        doAnalysis();
+      }catch(e){log('마이크 실패: '+e.message,'error');}
+    }
+
+    function stopAnalysis(){
+      isAnalyzing=false;
+      if(captureStream){captureStream.getTracks().forEach(t=>t.stop());captureStream=null;}
+      document.getElementById('btnSystem').textContent='🔊 오디오 캡처';
+      document.getElementById('btnMic').textContent='🎤 마이크';
+    }
+
+    function loadVideo(id){
+      document.getElementById('playerWrapper').innerHTML=
+        `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1" allow="autoplay; encrypted-media; microphone" allowfullscreen></iframe>`;
+      log(`YouTube 로드: ${id}`);
+      log('💡 "오디오 캡처" 버튼을 눌러 코드 분석을 시작하세요 (헤드폰 OK)', 'warn');
+    }
+
+    document.getElementById('btnLoad').addEventListener('click',()=>{
+      const url=document.getElementById('urlInput').value.trim();
+      if(!url){log('URL을 입력하세요','warn');return;}
+      const id=extractId(url);
+      if(!id){log('유효한 YouTube URL이 아닙니다','error');return;}
+      loadVideo(id);
+    });
+    document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btnLoad').click();});
+    document.querySelectorAll('.preset-btn').forEach(b=>b.addEventListener('click',()=>{
+      const id=b.dataset.id;
+      document.getElementById('urlInput').value=`https://www.youtube.com/watch?v=${id}`;
+      loadVideo(id);
+    }));
+
+    document.getElementById('btnSystem').addEventListener('click',()=>{
+      if(isAnalyzing){stopAnalysis();log('분석 중지');}
+      else startSystemAudio();
+    });
+    document.getElementById('btnMic').addEventListener('click',()=>{
+      if(isAnalyzing){stopAnalysis();log('분석 중지');}
+      else startMic();
+    });
+
+    let metroInt=null,beat=0,bpm=120;
+    function tick(){
+      beat=(beat%4)+1;
+      for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.toggle('on',i===beat);
+      const c=new AudioContext(),o=c.createOscillator(),g=c.createGain();
+      o.frequency.value=beat===1?1000:800;g.gain.value=0.06;
+      o.connect(g);g.connect(c.destination);o.start();
+      g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.04);o.stop(c.currentTime+0.04);
+    }
+    document.getElementById('btnMetro').addEventListener('click',()=>{
+      if(metroInt){clearInterval(metroInt);metroInt=null;document.getElementById('btnMetro').textContent='▶ 메트로놈';
+        for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.remove('on');beat=0;}
+      else{metroInt=setInterval(tick,60000/bpm);document.getElementById('btnMetro').textContent='⏸ 정지';log(`메트로놈 ${bpm} BPM`);}
+    });
+    document.getElementById('bpmDn').addEventListener('click',()=>{bpm=Math.max(30,bpm-5);document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}});
+    document.getElementById('bpmUp').addEventListener('click',()=>{bpm=Math.min(300,bpm+5);document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}});
+
+    let ws=null,currentRoom=null;const userId='user_'+Math.random().toString(36).slice(2,8);
+    function connectWS(){
+      return new Promise((res,rej)=>{
+        ws=new WebSocket('ws://localhost:8765');
+        ws.onopen=()=>{document.getElementById('syncDot').classList.add('on');document.getElementById('syncLabel').textContent='연결됨';document.getElementById('syncBadge').classList.add('connected');log('WebSocket 연결됨');res();};
+        ws.onmessage=e=>{const m=JSON.parse(e.data);
+          if(m.type==='room_joined'){currentRoom=m.roomCode;bpm=m.bpm;document.getElementById('bpmVal').textContent=bpm;document.getElementById('syncLabel').textContent=`방 ${m.roomCode} (${m.users.length}명)`;log(`방 ${m.roomCode} — ${m.users.length}명`);renderUsers(m.users);}
+          else if(m.type==='user_joined'||m.type==='user_left'){document.getElementById('syncLabel').textContent=`방 ${currentRoom} (${m.users.length}명)`;renderUsers(m.users);}
+          else if(m.type==='bpm_update'){bpm=m.bpm;document.getElementById('bpmVal').textContent=bpm;}
+          else if(m.type==='tick'){beat=m.beat;for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.toggle('on',i===beat);}
+          else if(m.type==='error')log(m.message,'error');
+        };
+        ws.onclose=()=>{document.getElementById('syncDot').classList.remove('on');document.getElementById('syncBadge').classList.remove('connected');document.getElementById('syncLabel').textContent='끊김';currentRoom=null;};
+        ws.onerror=()=>{log('WebSocket 연결 실패','error');rej();};
+      });
+    }
+    function renderUsers(u){document.getElementById('usersList').innerHTML=u.map(x=>`<div class="user-chip ${x.isHost?'host':''}">${x.isHost?'👑 ':''}${x.nickname}</div>`).join('');}
+    document.getElementById('btnCreate').addEventListener('click',async()=>{try{if(!ws||ws.readyState!==1)await connectWS();const c=Math.random().toString(36).slice(2,8).toUpperCase();document.getElementById('roomInput').value=c;ws.send(JSON.stringify({type:'create_room',roomCode:c,userId,nickname:userId}));}catch{}});
+    document.getElementById('btnJoin').addEventListener('click',async()=>{const c=document.getElementById('roomInput').value.trim();if(!c){log('방 코드를 입력하세요','warn');return;}try{if(!ws||ws.readyState!==1)await connectWS();ws.send(JSON.stringify({type:'join_room',roomCode:c,userId,nickname:userId}));}catch{}});
+
+    loadWasm();
+    log('SyncChord 준비 완료 — YouTube URL 또는 프리셋 클릭');
+  </script>
+</body>
+</html>
