@@ -1,0 +1,105 @@
+/* SyncChord Overlay — sits on top of YouTube player */
+
+#syncchord-overlay {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: none;
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  transition: opacity 0.3s;
+}
+
+/* ── Chord Bar ────────────────────────────────────── */
+
+.sc-chord-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 8px 16px;
+}
+
+.sc-chord {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sc-chord-prev,
+.sc-chord-next {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.45);
+  min-width: 40px;
+  text-align: center;
+}
+
+.sc-chord-current {
+  font-size: 28px;
+  color: #4fc3f7;
+  text-shadow: 0 0 12px rgba(79, 195, 247, 0.5);
+  min-width: 60px;
+  text-align: center;
+  padding: 0 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+  border-right: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Info Bar ─────────────────────────────────────── */
+
+.sc-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  border-radius: 8px;
+  padding: 4px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.sc-bpm {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #ffb74d;
+}
+
+.sc-confidence {
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-sync {
+  font-size: 11px;
+}
+
+/* ── Metronome Flash (toggled via JS) ─────────────── */
+
+.sc-metronome-flash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 183, 77, 0.08);
+  pointer-events: none;
+  animation: sc-flash 0.1s ease-out;
+}
+
+@keyframes sc-flash {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Hide overlay when controls hidden (fullscreen idle) */
+.ytp-autohide #syncchord-overlay {
+  opacity: 0;
+}

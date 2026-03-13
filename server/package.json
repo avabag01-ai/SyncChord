@@ -1,0 +1,12 @@
+{
+  "name": "syncchord-server",
+  "version": "0.1.0",
+  "description": "SyncChord WebSocket sync server for multi-user metronome jam",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

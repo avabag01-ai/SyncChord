@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "SyncChord",
+  "version": "0.1.0",
+  "description": "YouTube real-time chord recognition + sync jam",
+  "permissions": ["activeTab"],
+  "host_permissions": ["*://*.youtube.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["src/sync.js", "src/content.js"],
+      "css": ["src/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["wasm/*"],
+      "matches": ["*://*.youtube.com/*"]
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 300px;
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 span { font-size: 22px; }
+
+    .section {
+      background: #16213e;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .chord-display {
+      text-align: center;
+      font-size: 36px;
+      font-weight: 800;
+      color: #4fc3f7;
+      padding: 8px 0;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 13px;
+      color: #aaa;
+    }
+    .stats span { font-variant-numeric: tabular-nums; }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .toggle-row label { font-size: 13px; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle .slider {
+      position: absolute;
+      inset: 0;
+      background: #333;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .toggle .slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 3px; top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+    .toggle input:checked + .slider { background: #4fc3f7; }
+    .toggle input:checked + .slider::before { transform: translateX(20px); }
+
+    .jam-section input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #0f3460;
+      color: #eee;
+      font-size: 14px;
+      margin-bottom: 8px;
+      text-align: center;
+      letter-spacing: 4px;
+      font-weight: 700;
+    }
+    .jam-section input::placeholder {
+      letter-spacing: normal;
+      font-weight: 400;
+      color: #666;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-primary {
+      background: #4fc3f7;
+      color: #1a1a2e;
+    }
+    .btn-primary:hover { background: #81d4fa; }
+    .btn-secondary {
+      background: #333;
+      color: #eee;
+      margin-top: 6px;
+    }
+    .btn-secondary:hover { background: #444; }
+
+    .status {
+      text-align: center;
+      font-size: 11px;
+      color: #666;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1><span>🎸</span> SyncChord</h1>
+
+  <!-- Analysis Status -->
+  <div class="section">
+    <div class="section-title">현재 분석</div>
+    <div class="chord-display" id="chord">N/C</div>
+    <div class="stats">
+      <span id="bpm">— BPM</span>
+      <span id="confidence">정확도 0%</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="section">
+    <div class="section-title">컨트롤</div>
+    <div class="toggle-row">
+      <label>코드 분석</label>
+      <div class="toggle">
+        <input type="checkbox" id="toggleAnalysis">
+        <span class="slider"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jam Session -->
+  <div class="section jam-section">
+    <div class="section-title">합주방</div>
+    <input type="text" id="roomCode" placeholder="방 코드 입력 (6자리)" maxlength="6">
+    <button class="btn btn-primary" id="joinRoom">합주 참가</button>
+    <button class="btn btn-secondary" id="createRoom">새 방 만들기</button>
+  </div>
+
+  <div class="status" id="status">YouTube 영상 페이지에서 사용하세요</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
