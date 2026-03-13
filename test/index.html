@@ -98,50 +98,43 @@
     }
     .placeholder-icon { font-size: 4rem; }
 
-    .conf-bar {
-      height: 3px; background: #2a2a4a;
-      width: 100%; max-width: 900px; overflow: hidden;
-    }
-    .conf-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #ff6b35, #f7c948);
-      width: 0%; transition: width 0.15s;
-    }
-
-    .chord-overlay {
+    /* ── Chordify-style 타임라인 ── */
+    .chord-timeline-wrapper {
       width: 100%; max-width: 900px;
-      background: rgba(15,15,15,0.95);
-      backdrop-filter: blur(12px);
+      background: #111118;
       border: 1px solid #2a2a4a;
-      border-top: 2px solid #ff6b35;
+      border-top: none;
       border-radius: 0 0 12px 12px;
-      padding: 10px 16px;
+      overflow: hidden;
+    }
+    .chord-info-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px;
+      background: #16161e;
+      border-bottom: 1px solid #222;
+    }
+    .chord-now {
       display: flex; align-items: center; gap: 12px;
     }
-    .chord-strip {
-      display: flex; gap: 4px; flex: 1; overflow: hidden;
+    .chord-now-label {
+      font-size: 2rem; font-weight: 800;
+      background: linear-gradient(135deg, #ff6b35, #f7c948);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      min-width: 60px; text-align: center;
+      line-height: 1;
     }
-    .chord-cell {
-      flex-shrink: 0; width: 60px; height: 44px;
-      border-radius: 6px;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      font-size: 1.05rem; font-weight: 700;
-      background: #1a1a2e; border: 1px solid #2a2a4a;
-      transition: all 0.2s; color: #aaa;
+    .chord-now-conf {
+      height: 4px; width: 80px; background: #2a2a4a; border-radius: 2px; overflow: hidden;
     }
-    .chord-cell.active {
-      background: linear-gradient(135deg, #ff6b35, #e85d26);
-      border-color: #ff6b35; color: #fff;
-      transform: scale(1.08);
-      box-shadow: 0 0 16px rgba(255,107,53,0.4);
+    .chord-now-conf-fill {
+      height: 100%; background: linear-gradient(90deg, #ff6b35, #f7c948);
+      width: 0%; transition: width 0.2s;
     }
-    .chord-cell.next { border-color: #f7c948; color: #f7c948; }
-    .chord-cell small { font-size: 0.5rem; font-weight: 400; opacity: 0.6; }
-
+    .chord-now-meta { display: flex; flex-direction: column; gap: 2px; }
+    .chord-now-meta span { font-size: 0.65rem; color: #666; }
     .metro-mini {
       display: flex; flex-direction: column;
-      align-items: center; gap: 4px; min-width: 90px;
+      align-items: center; gap: 4px;
     }
     .metro-dots { display: flex; gap: 5px; }
     .metro-dot {
@@ -154,7 +147,6 @@
     }
     .bpm-label { font-size: 0.8rem; font-weight: 700; color: #f7c948; }
     .bpm-label small { font-weight: 400; color: #888; }
-
     .sync-badge {
       display: flex; align-items: center; gap: 5px;
       padding: 3px 8px; border-radius: 14px;
@@ -162,10 +154,116 @@
       color: #888; border: 1px solid #2a2a4a;
     }
     .sync-badge.connected { border-color: #4ade80; color: #4ade80; }
-    .sync-dot {
-      width: 6px; height: 6px; border-radius: 50%; background: #555;
-    }
+    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #555; }
     .sync-dot.on { background: #4ade80; }
+
+    /* 타임라인 트랙 */
+    .timeline-container {
+      position: relative;
+      height: 80px;
+      overflow: hidden;
+      user-select: none;
+    }
+    .timeline-track {
+      display: flex;
+      height: 100%;
+      position: absolute; top: 0; left: 0;
+      transition: transform 0.3s ease-out;
+    }
+    /* 플레이헤드: 왼쪽에서 25% 위치 고정 (미래 코드 미리보기) */
+    .playhead {
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 25%;
+      width: 3px;
+      background: #ff6b35;
+      z-index: 10;
+      box-shadow: 0 0 8px rgba(255,107,53,0.6);
+    }
+    .playhead::before {
+      content: ''; position: absolute;
+      top: -4px; left: -5px;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 6px solid #ff6b35;
+    }
+    /* 비트 그리드 라인 */
+    .beat-grid {
+      position: absolute; top: 0; bottom: 0;
+      width: 1px; background: rgba(255,255,255,0.06);
+      z-index: 1;
+    }
+    .beat-grid.bar { background: rgba(255,255,255,0.12); }
+
+    /* 코드 블록 (1 beat = 1 cell) */
+    .chord-block {
+      height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #bbb;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+      transition: background 0.15s;
+    }
+    /* 마디 첫 박 (굵은 구분선) */
+    .chord-block.bar-start {
+      border-left: 2px solid rgba(255,255,255,0.18);
+    }
+    .chord-block .chord-label {
+      z-index: 2; position: relative;
+      padding: 3px 6px; border-radius: 4px;
+      background: rgba(0,0,0,0.25);
+      white-space: nowrap;
+    }
+    /* 같은 코드 연속 시 첫 번째만 이름 표시, 나머지는 점선 */
+    .chord-block .chord-label.continuation {
+      font-size: 0.7rem; opacity: 0.35; background: none;
+    }
+    .chord-block.past { opacity: 0.45; }
+    .chord-block.current { opacity: 1; background: rgba(255,107,53,0.08); }
+    .chord-block.current .chord-label {
+      background: rgba(255,107,53,0.3);
+      color: #fff; font-size: 1.15rem;
+      box-shadow: 0 0 10px rgba(255,107,53,0.2);
+    }
+    .chord-block.future { opacity: 0.55; }
+    .chord-block.future-empty { opacity: 0.25; }
+
+    /* 코드별 색상 밴드 (상단 4px 색상 바) */
+    .chord-block::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 4px;
+    }
+    .chord-block[data-root="C"]::before { background: #4ade80; }
+    .chord-block[data-root="C#"]::before, .chord-block[data-root="Db"]::before { background: #22d3ee; }
+    .chord-block[data-root="D"]::before { background: #60a5fa; }
+    .chord-block[data-root="D#"]::before, .chord-block[data-root="Eb"]::before { background: #818cf8; }
+    .chord-block[data-root="E"]::before { background: #a78bfa; }
+    .chord-block[data-root="F"]::before { background: #c084fc; }
+    .chord-block[data-root="F#"]::before, .chord-block[data-root="Gb"]::before { background: #e879f9; }
+    .chord-block[data-root="G"]::before { background: #f472b6; }
+    .chord-block[data-root="G#"]::before, .chord-block[data-root="Ab"]::before { background: #fb7185; }
+    .chord-block[data-root="A"]::before { background: #f97316; }
+    .chord-block[data-root="A#"]::before, .chord-block[data-root="Bb"]::before { background: #f59e0b; }
+    .chord-block[data-root="B"]::before { background: #84cc16; }
+    .chord-block[data-root="-"]::before { background: #333; }
+
+    /* 하단 마디 번호 */
+    .bar-numbers {
+      display: flex; height: 18px;
+      background: #0e0e14;
+      border-top: 1px solid #222;
+      font-size: 0.55rem; color: #555;
+      overflow: hidden; position: relative;
+    }
+    .bar-num {
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-right: 1px solid rgba(255,255,255,0.04);
+    }
+    .bar-num.current { color: #ff6b35; font-weight: 700; }
 
     .bottom-panel {
       width: 100%; max-width: 900px;
@@ -244,34 +342,37 @@
       <div>YouTube URL을 입력하거나 프리셋을 클릭하세요</div>
     </div>
   </div>
-  <div class="conf-bar"><div class="conf-fill" id="confFill"></div></div>
-
-  <div class="chord-overlay">
-    <div class="chord-strip" id="chordStrip">
-      <div class="chord-cell" id="c0"><span>-</span></div>
-      <div class="chord-cell" id="c1"><span>-</span></div>
-      <div class="chord-cell active" id="c2"><span>-</span><small>now</small></div>
-      <div class="chord-cell next" id="c3"><span>-</span></div>
-      <div class="chord-cell" id="c4"><span>-</span></div>
-      <div class="chord-cell" id="c5"><span>-</span></div>
-      <div class="chord-cell" id="c6"><span>-</span></div>
-      <div class="chord-cell" id="c7"><span>-</span></div>
-      <div class="chord-cell" id="c8"><span>-</span></div>
-      <div class="chord-cell" id="c9"><span>-</span></div>
-    </div>
-    <div class="metro-mini">
-      <div class="metro-dots">
-        <div class="metro-dot" id="md1"></div>
-        <div class="metro-dot" id="md2"></div>
-        <div class="metro-dot" id="md3"></div>
-        <div class="metro-dot" id="md4"></div>
+  <div class="chord-timeline-wrapper">
+    <!-- 상단 정보 바: 현재 코드 + BPM + 싱크 -->
+    <div class="chord-info-bar">
+      <div class="chord-now">
+        <div class="chord-now-label" id="chordNowLabel">-</div>
+        <div class="chord-now-meta">
+          <span id="chordNowType">대기 중</span>
+          <div class="chord-now-conf"><div class="chord-now-conf-fill" id="confFill"></div></div>
+        </div>
       </div>
-      <div class="bpm-label"><span id="bpmVal">120</span> <small>BPM</small></div>
+      <div class="metro-mini">
+        <div class="metro-dots">
+          <div class="metro-dot" id="md1"></div>
+          <div class="metro-dot" id="md2"></div>
+          <div class="metro-dot" id="md3"></div>
+          <div class="metro-dot" id="md4"></div>
+        </div>
+        <div class="bpm-label"><span id="bpmVal">120</span> <small>BPM</small></div>
+      </div>
+      <div class="sync-badge" id="syncBadge">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncLabel">오프라인</span>
+      </div>
     </div>
-    <div class="sync-badge" id="syncBadge">
-      <div class="sync-dot" id="syncDot"></div>
-      <span id="syncLabel">오프라인</span>
+    <!-- 타임라인 트랙 -->
+    <div class="timeline-container" id="timelineContainer">
+      <div class="playhead"></div>
+      <div class="timeline-track" id="timelineTrack"></div>
     </div>
+    <!-- 마디 번호 -->
+    <div class="bar-numbers" id="barNumbers"></div>
   </div>
 
   <div class="bottom-panel">
@@ -341,50 +442,132 @@
       return{chord:best,confidence:bs};
     }
 
-    // ── 코드 스무딩: BPM 기반으로 반 마디(2박) 단위로 코드 확정 ──
-    let chordHistory=['-','-','-','-','-','-','-','-','-','-'];
-    let voteBuffer = []; // 반 마디 동안 감지된 코드들
-    let lastChordTime = 0;
+    // ── Chordify 스타일 타임라인 (1 beat = 1 cell, 4 beats/bar) ──
+    // beatTimeline[i] = { chord, conf } — 각 비트의 코드
+    let beatTimeline = [];   // 과거+현재 비트 배열
+    let voteBuffer = [];
+    let lastBeatTime = 0;
     let currentDisplayChord = '-';
+    let currentBeatInBar = 0; // 0~3 (4/4박자)
 
-    function getHalfBarMs(){
-      // 반 마디 = 2박 = 2 * (60000/bpm)
-      return 2 * (60000 / bpm);
+    const BEAT_W = 56;  // 1 비트 셀 너비(px)
+    const PLAYHEAD_PCT = 0.25; // 플레이헤드 위치 (25% — 오른쪽에 미래 코드 미리보기)
+    const BEATS_PER_BAR = 4;
+
+    function getBeatMs(){
+      return 60000 / bpm; // 1 beat = 60000/BPM ms
     }
 
-    function commitChord(){
-      // 투표: 가장 많이 나온 코드를 확정
-      if(voteBuffer.length === 0) return;
-      const counts = {};
-      let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
-      for(const v of voteBuffer){
-        counts[v.chord] = (counts[v.chord] || 0) + 1;
-        if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
-          bestCount = counts[v.chord];
-          bestChord = v.chord;
-          bestConf = v.confidence;
+    function chordRoot(name){
+      if(!name || name === '-' || name === 'N/C') return '-';
+      return name.replace(/m$/, '');
+    }
+
+    function commitBeat(){
+      // 투표: 이 비트 동안 가장 많이 감지된 코드
+      let chord = '-', conf = 0;
+      if(voteBuffer.length > 0){
+        const counts = {};
+        let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
+        for(const v of voteBuffer){
+          counts[v.chord] = (counts[v.chord] || 0) + 1;
+          if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
+            bestCount = counts[v.chord];
+            bestChord = v.chord;
+            bestConf = v.confidence;
+          }
+        }
+        chord = bestChord;
+        conf = bestConf;
+      }
+
+      beatTimeline.push({ chord, conf });
+      currentDisplayChord = chord;
+      currentBeatInBar = (beatTimeline.length - 1) % BEATS_PER_BAR;
+      voteBuffer = [];
+      renderTimeline(conf);
+    }
+
+    function renderTimeline(conf){
+      const track = document.getElementById('timelineTrack');
+      const container = document.getElementById('timelineContainer');
+      const barRow = document.getElementById('barNumbers');
+      const containerW = container.clientWidth;
+      const totalBeats = beatTimeline.length;
+
+      // 미래 빈 비트 수 (화면 오른쪽 75% 채우기)
+      const futureBeats = Math.ceil(containerW * (1 - PLAYHEAD_PCT) / BEAT_W) + 4;
+      const allBeats = totalBeats + futureBeats;
+
+      // 블록 HTML — 비트별 셀
+      let html = '';
+      for(let i = 0; i < allBeats; i++){
+        const isPast = i < totalBeats - 1;
+        const isCurrent = i === totalBeats - 1;
+        const isFuture = i >= totalBeats;
+        const beatInBar = i % BEATS_PER_BAR;
+        const isBarStart = beatInBar === 0;
+
+        let cls = isCurrent ? 'current' : isPast ? 'past' : 'future-empty';
+        if(isBarStart) cls += ' bar-start';
+
+        if(isFuture){
+          // 미래 빈 셀
+          const root = '-';
+          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
+            <span class="chord-label continuation">·</span>
+          </div>`;
+        } else {
+          const b = beatTimeline[i];
+          const root = chordRoot(b.chord);
+          // 같은 코드 연속인지 확인 — 연속이면 첫 번째만 이름, 나머지는 ─
+          const prevChord = i > 0 ? beatTimeline[i-1].chord : null;
+          const isContinuation = !isBarStart && b.chord === prevChord && !isCurrent;
+          const label = isContinuation
+            ? `<span class="chord-label continuation">─</span>`
+            : `<span class="chord-label">${b.chord}</span>`;
+          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
+            ${label}
+          </div>`;
         }
       }
-      // 이전과 같으면 스킵 (불필요한 UI 업데이트 방지)
-      if(bestChord !== currentDisplayChord){
-        currentDisplayChord = bestChord;
-        chordHistory.shift();
-        chordHistory.push(bestChord);
-        renderChordBar(bestConf);
-      }
-      voteBuffer = [];
-    }
+      track.innerHTML = html;
 
-    function renderChordBar(conf){
-      for(let i=0;i<10;i++){
-        const el=document.getElementById('c'+i);
-        el.querySelector('span').textContent=chordHistory[i];
-        el.className='chord-cell';
-        const sm=el.querySelector('small');if(sm)sm.remove();
-        if(i===2){el.classList.add('active');const s=document.createElement('small');s.textContent='now';el.appendChild(s);}
-        else if(i===3)el.classList.add('next');
+      // 스크롤: 현재 비트가 플레이헤드(25%) 위치에 오도록
+      const playheadX = containerW * PLAYHEAD_PCT;
+      const currentCenter = (totalBeats - 0.5) * BEAT_W;
+      const offset = currentCenter - playheadX;
+      track.style.transform = `translateX(${-offset}px)`;
+
+      // 마디 번호 바
+      let barHtml = '';
+      for(let i = 0; i < allBeats; i++){
+        const beatInBar = i % BEATS_PER_BAR;
+        const barNum = Math.floor(i / BEATS_PER_BAR) + 1;
+        const isCurrent = i === totalBeats - 1;
+        // 첫 박에만 마디 번호, 나머지는 박 번호 (1~4)
+        const txt = beatInBar === 0
+          ? `<b>${barNum}</b>`
+          : `${beatInBar + 1}`;
+        barHtml += `<div class="bar-num ${isCurrent ? 'current' : ''}" style="width:${BEAT_W}px">${txt}</div>`;
       }
-      document.getElementById('confFill').style.width=`${(conf*100).toFixed(0)}%`;
+      barRow.innerHTML = barHtml;
+      barRow.style.position = 'relative';
+      barRow.style.transform = `translateX(${-offset}px)`;
+      barRow.style.width = `${allBeats * BEAT_W}px`;
+
+      // 상단 현재 코드 + 메타
+      document.getElementById('chordNowLabel').textContent = currentDisplayChord;
+      const type = currentDisplayChord.endsWith('m') ? 'minor' :
+                   currentDisplayChord === '-' || currentDisplayChord === 'N/C' ? '' : 'major';
+      document.getElementById('chordNowType').textContent =
+        type ? `${type}  |  마디 ${Math.floor((totalBeats-1)/4)+1}  박 ${currentBeatInBar+1}` : `마디 ${Math.floor((totalBeats-1)/4)+1}`;
+      document.getElementById('confFill').style.width = `${(conf * 100).toFixed(0)}%`;
+
+      // 메트로놈 dot 연동
+      for(let i = 1; i <= 4; i++){
+        document.getElementById('md'+i).classList.toggle('on', i === currentBeatInBar + 1);
+      }
     }
 
     let audioCtx,analyser,isAnalyzing=false;
@@ -435,11 +618,11 @@
         voteBuffer.push(res);
       }
 
-      // 반 마디 경과 시 코드 확정
+      // 1 beat 경과 시 코드 확정 (4/4 → 한 마디에 4칸)
       const now = performance.now();
-      if(now - lastChordTime >= getHalfBarMs()){
-        commitChord();
-        lastChordTime = now;
+      if(now - lastBeatTime >= getBeatMs()){
+        commitBeat();
+        lastBeatTime = now;
       }
 
       // ~50ms 간격으로 분석 (빠르게 샘플링, 느리게 출력)
