@@ -330,6 +330,7 @@
   </div>
 
   <div class="presets">
+    <button class="preset-btn" data-id="kl0rqqhCU_s">🎤 김범수 - 보고싶다</button>
     <button class="preset-btn" data-id="5qap5aO4i9A">🎸 lofi hip hop</button>
     <button class="preset-btn" data-id="60ItHLz5WEA">🎵 Alan Walker - Faded</button>
     <button class="preset-btn" data-id="YQHsXMglC9A">🎶 Adele - Hello</button>
@@ -359,7 +360,7 @@
           <div class="metro-dot" id="md3"></div>
           <div class="metro-dot" id="md4"></div>
         </div>
-        <div class="bpm-label"><span id="bpmVal">120</span> <small>BPM</small></div>
+        <div class="bpm-label"><span id="bpmVal">80</span> <small>BPM</small></div>
       </div>
       <div class="sync-badge" id="syncBadge">
         <div class="sync-dot" id="syncDot"></div>
@@ -426,126 +427,211 @@
       }
     }
 
-    // ── 코드 인식 엔진 ──
+    // ── 코드 인식 엔진 v2 (정확도 대폭 개선) ──
     const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    const MAJ=[1,0,0,0,1,0,0,1,0,0,0,0], MIN=[1,0,0,1,0,0,0,1,0,0,0,0];
-    function jsChord(c){
-      let best='N/C',bs=-1;
-      for(let r=0;r<12;r++)for(const[t,s]of[[MAJ,''],[MIN,'m']]){
-        let d=0,a=0,b=0;for(let i=0;i<12;i++){const v=t[(i-r+12)%12];d+=c[i]*v;a+=c[i]**2;b+=v**2;}
-        const sc=d/(Math.sqrt(a)*Math.sqrt(b)+1e-10);if(sc>bs){bs=sc;best=NOTES[r]+s;}
+
+    // 확장 코드 템플릿 (24개 → 60개+)
+    const TEMPLATES = {};
+    function T(intervals){ const t = new Float64Array(12); for(const i of intervals) t[i%12]=1; return t; }
+    // Major, Minor, 7th, m7, Maj7, dim, aug, sus2, sus4
+    const TYPES = {
+      '':    [0,4,7],       // major
+      'm':   [0,3,7],       // minor
+      '7':   [0,4,7,10],    // dominant 7th
+      'm7':  [0,3,7,10],    // minor 7th
+      'M7':  [0,4,7,11],    // major 7th
+      'dim': [0,3,6],       // diminished
+      'aug': [0,4,8],       // augmented
+      'sus2':[0,2,7],       // sus2
+      'sus4':[0,5,7],       // sus4
+    };
+    for(let r=0;r<12;r++){
+      for(const [suffix, intervals] of Object.entries(TYPES)){
+        const shifted = intervals.map(i => (i+r)%12);
+        TEMPLATES[NOTES[r]+suffix] = T(shifted);
       }
-      return{chord:best,confidence:bs};
     }
+
+    // 코사인 유사도 + 베이스 가중치
+    function cosineSim(a, b){
+      let d=0,na=0,nb=0;
+      for(let i=0;i<12;i++){d+=a[i]*b[i];na+=a[i]**2;nb+=b[i]**2;}
+      return d/(Math.sqrt(na)*Math.sqrt(nb)+1e-10);
+    }
+
+    // 히스테리시스: 현재 코드와 비교해서 충분히 높아야 변경
+    let stableChord = '-';
+    let stableConf = 0;
+    const HYSTERESIS = 0.08; // 이 값 이상 차이나야 코드 변경
+
+    function jsChord(chroma, bassChroma){
+      let best='N/C', bs=-1;
+      // 1차: 전체 템플릿 매칭
+      for(const [name, tmpl] of Object.entries(TEMPLATES)){
+        const sc = cosineSim(chroma, tmpl);
+        // 베이스 음 보너스: 루트 음이 베이스에서 강하면 +0.1
+        const rootIdx = NOTES.indexOf(name.replace(/m7?$|M7$|7$|dim$|aug$|sus[24]$/,''));
+        const bassBonus = (bassChroma && rootIdx >= 0) ? bassChroma[rootIdx] * 0.12 : 0;
+        const total = sc + bassBonus;
+        if(total > bs){ bs = total; best = name; }
+      }
+      // 히스테리시스: 현재 코드가 충분히 좋으면 유지
+      if(stableChord !== '-' && stableChord !== 'N/C'){
+        const stableScore = cosineSim(chroma, TEMPLATES[stableChord] || T([0,4,7]));
+        if(bs - stableScore < HYSTERESIS){
+          // 차이가 작으면 현재 코드 유지
+          return { chord: stableChord, confidence: stableScore };
+        }
+      }
+      stableChord = best;
+      stableConf = bs;
+      // 간소화: 7th → 기본 코드로 (UI 단순화, 옵션)
+      // best = best.replace(/7$|M7$/,'').replace('m7','m');
+      return { chord: best, confidence: bs };
+    }
+
+    // 개선된 크로마그램: 대역별 분리 (베이스 / 중음)
     function chromaFromDB(fftDB, sr){
       const chroma = new Float64Array(12);
+      const bassChroma = new Float64Array(12);
       const binHz = sr / (fftDB.length * 2);
       for(let i=1;i<fftDB.length;i++){
         const freq = i * binHz;
-        if(freq < 65 || freq > 2100) continue;
+        if(freq < 50 || freq > 4000) continue;
         const db = fftDB[i];
-        if(db < -80) continue;
-        const power = Math.pow(10, (db + 80) / 20);
+        if(db < -70) continue;
+        // 주파수 대역별 가중치
+        const power = Math.pow(10, (db + 70) / 20);
         const midi = 12 * Math.log2(freq / 440) + 69;
         const pc = ((Math.round(midi) % 12) + 12) % 12;
-        chroma[pc] += power;
+
+        if(freq < 300){
+          // 베이스 대역 (50-300Hz) — 루트 음 판별에 핵심
+          bassChroma[pc] += power * 2.0;
+          chroma[pc] += power * 1.5; // 베이스도 전체 크로마에 기여
+        } else if(freq < 1200){
+          // 중음 대역 (300-1200Hz) — 코드 구성음의 핵심
+          chroma[pc] += power * 1.2;
+        } else {
+          // 고음 대역 (1200-4000Hz) — 배음, 약하게 반영
+          chroma[pc] += power * 0.5;
+        }
       }
+      // 정규화
       const mx = Math.max(...chroma, 0.001);
       for(let i=0;i<12;i++) chroma[i] /= mx;
-      return chroma;
+      const bmx = Math.max(...bassChroma, 0.001);
+      for(let i=0;i<12;i++) bassChroma[i] /= bmx;
+      return { chroma, bassChroma };
     }
 
-    // ── 자동 BPM 감지 (onset energy autocorrelation) ──
-    let bpm = 120;
-    let bpmLocked = false;      // 사용자가 수동 조절하면 자동감지 잠금
-    let energyHistory = [];     // 최근 에너지 값 (onset 감지용)
-    let onsetTimes = [];        // onset 시각 배열 (BPM 계산용)
+    // ── 자동 BPM 감지 (onset energy, 느린 발라드~빠른 팝 전부 지원) ──
+    let bpm = 80;  // 초기값을 80으로 (발라드 기본)
+    let bpmLocked = false;
+    let energyHistory = [];
+    let onsetTimes = [];
+    let bpmCandidates = []; // BPM 후보 누적 (안정적 감지)
 
     function detectBPMFromOnsets(){
-      if(onsetTimes.length < 8) return; // 최소 8개 onset 필요
-      // 인접 onset 간격으로 IOI (Inter-Onset Interval) 계산
+      if(onsetTimes.length < 6) return;
       const intervals = [];
       for(let i = 1; i < onsetTimes.length; i++){
         const dt = onsetTimes[i] - onsetTimes[i-1];
-        if(dt > 200 && dt < 2000) intervals.push(dt); // 30~300 BPM 범위
+        if(dt > 150 && dt < 3000) intervals.push(dt); // 20~400 BPM 범위 확대
       }
-      if(intervals.length < 4) return;
+      if(intervals.length < 3) return;
 
-      // IOI 히스토그램 (10ms 단위) → 가장 많은 간격 찾기
+      // IOI 히스토그램 (20ms 해상도)
       const hist = {};
       for(const dt of intervals){
-        const bucket = Math.round(dt / 10) * 10;
+        const bucket = Math.round(dt / 20) * 20;
         hist[bucket] = (hist[bucket] || 0) + 1;
       }
-      // 가장 많은 간격 + 그 절반/배수도 고려
-      let bestBucket = 0, bestCount = 0;
-      for(const [b, c] of Object.entries(hist)){
-        if(c > bestCount){ bestCount = c; bestBucket = Number(b); }
-      }
-      if(bestBucket < 200) return;
 
-      const detectedBPM = Math.round(60000 / bestBucket);
-      // 60~200 BPM 범위로 정규화
-      let normalized = detectedBPM;
-      if(normalized < 60) normalized *= 2;
-      if(normalized > 200) normalized = Math.round(normalized / 2);
-      if(normalized >= 60 && normalized <= 200 && !bpmLocked){
-        // 급격한 변화 방지: 이전 BPM과 20% 이상 차이 나면 점진적 변경
-        const diff = Math.abs(normalized - bpm);
-        if(diff > bpm * 0.2 && beatTimeline.length > 16){
-          bpm = Math.round(bpm + (normalized - bpm) * 0.3);
-        } else {
-          bpm = normalized;
+      // 상위 3개 후보 찾기
+      const sorted = Object.entries(hist).sort((a,b) => b[1] - a[1]);
+      if(sorted.length === 0) return;
+
+      // 각 후보에 대해 BPM 계산, 배수/약수 관계 고려
+      for(const [bucket, count] of sorted.slice(0, 3)){
+        const ms = Number(bucket);
+        if(ms < 150) continue;
+        let candidateBPM = Math.round(60000 / ms);
+
+        // 40-200 BPM 범위로 정규화
+        while(candidateBPM < 40) candidateBPM *= 2;
+        while(candidateBPM > 200) candidateBPM = Math.round(candidateBPM / 2);
+
+        if(candidateBPM >= 40 && candidateBPM <= 200){
+          bpmCandidates.push(candidateBPM);
         }
-        document.getElementById('bpmVal').textContent = bpm;
+      }
+
+      // 최근 20개 후보의 중앙값 사용 (안정적)
+      if(bpmCandidates.length > 20) bpmCandidates = bpmCandidates.slice(-20);
+      if(bpmCandidates.length >= 5 && !bpmLocked){
+        const sorted = [...bpmCandidates].sort((a,b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+
+        // ±5 범위 내 가장 빈도 높은 값
+        const nearby = bpmCandidates.filter(b => Math.abs(b - median) < 10);
+        if(nearby.length >= 3){
+          const avg = Math.round(nearby.reduce((a,b) => a+b, 0) / nearby.length);
+          // 부드러운 전환
+          const newBpm = Math.round(bpm * 0.6 + avg * 0.4);
+          if(Math.abs(newBpm - bpm) >= 2){
+            bpm = newBpm;
+            document.getElementById('bpmVal').textContent = bpm;
+            log(`🎵 BPM 감지: ${bpm}`, 'info');
+          }
+        }
       }
     }
 
-    // ── Onset 감지 (에너지 기반) ──
+    // ── Onset 감지 (에너지 기반, 민감도 조정) ──
     let prevEnergy = 0;
+    let lastOnsetTime = 0;
     function detectOnset(fftDB){
-      // 전체 주파수 에너지 합산
       let energy = 0;
       for(let i = 0; i < fftDB.length; i++){
-        if(fftDB[i] > -80) energy += Math.pow(10, fftDB[i] / 10);
+        if(fftDB[i] > -70) energy += Math.pow(10, fftDB[i] / 10);
       }
       const energyDB = 10 * Math.log10(energy + 1e-10);
       energyHistory.push(energyDB);
-      if(energyHistory.length > 100) energyHistory.shift(); // 최근 5초 (50ms × 100)
+      if(energyHistory.length > 150) energyHistory.shift();
 
-      // 평균 에너지 대비 급상승 = onset
       const avg = energyHistory.reduce((a,b) => a + b, 0) / energyHistory.length;
-      const threshold = avg + 3; // 3dB 이상 급상승
-      const isOnset = energyDB > threshold && energyDB - prevEnergy > 2;
+      const threshold = avg + 2.5; // 2.5dB 이상 급상승
+      const isOnset = energyDB > threshold && energyDB - prevEnergy > 1.5;
       prevEnergy = energyDB;
 
       if(isOnset){
         const now = performance.now();
-        onsetTimes.push(now);
-        // 최근 10초만 유지
-        while(onsetTimes.length > 0 && now - onsetTimes[0] > 10000){
-          onsetTimes.shift();
+        // 최소 간격 100ms (더블 onset 방지)
+        if(now - lastOnsetTime > 100){
+          onsetTimes.push(now);
+          lastOnsetTime = now;
+          while(onsetTimes.length > 0 && now - onsetTimes[0] > 15000){
+            onsetTimes.shift();
+          }
+          if(onsetTimes.length % 3 === 0) detectBPMFromOnsets();
         }
-        // 주기적으로 BPM 재계산
-        if(onsetTimes.length % 4 === 0) detectBPMFromOnsets();
       }
       return isOnset;
     }
 
-    // ── 비트 싱크 타이머 (onset에 위상 맞춤) ──
+    // ── 비트 싱크 ──
     let lastBeatTime = 0;
-    let beatPhaseOffset = 0; // onset으로부터의 위상 보정값
+    let beatPhaseOffset = 0;
 
     function snapBeatToOnset(onsetTime){
-      // 가장 가까운 비트 경계와 onset 시점의 차이로 위상 보정
       const beatMs = 60000 / bpm;
       const elapsed = onsetTime - lastBeatTime;
       const beatFraction = (elapsed % beatMs) / beatMs;
-      // onset이 비트 경계 근처 (±20%)면 싱크 조정
-      if(beatFraction < 0.2 || beatFraction > 0.8){
+      if(beatFraction < 0.15 || beatFraction > 0.85){
         beatPhaseOffset = beatFraction < 0.5
-          ? -beatFraction * beatMs * 0.5    // onset이 비트 직후 → 약간 앞으로
-          : (1 - beatFraction) * beatMs * 0.5; // onset이 비트 직전 → 약간 뒤로
+          ? -beatFraction * beatMs * 0.3
+          : (1 - beatFraction) * beatMs * 0.3;
       }
     }
 
@@ -569,6 +655,7 @@
     function commitBeat(){
       let chord = '-', conf = 0;
       if(voteBuffer.length > 0){
+        // 투표: 가장 빈도 높은 코드 선택
         const counts = {};
         let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
         for(const v of voteBuffer){
@@ -581,6 +668,18 @@
         }
         chord = bestChord;
         conf = bestConf;
+
+        // 안정성: 이전 박과 같은 코드면 confidence 보너스
+        const prevBeat = beatTimeline.length > 0 ? beatTimeline[beatTimeline.length-1] : null;
+        if(prevBeat && prevBeat.chord !== '-'){
+          const prevCount = counts[prevBeat.chord] || 0;
+          const prevRatio = prevCount / voteBuffer.length;
+          // 이전 코드가 30% 이상 나왔고, 새 코드와 차이가 20% 미만이면 이전 코드 유지
+          if(prevRatio > 0.3 && bestCount / voteBuffer.length - prevRatio < 0.2){
+            chord = prevBeat.chord;
+            conf = Math.max(conf, prevBeat.conf * 0.9);
+          }
+        }
       }
       beatTimeline.push({ chord, conf });
       currentDisplayChord = chord;
@@ -686,27 +785,30 @@
       const isOnset = detectOnset(fftDB);
       if(isOnset) snapBeatToOnset(performance.now());
 
-      // 코드 인식
+      // 코드 인식 (개선된 엔진 v2)
       let res;
+      const { chroma, bassChroma } = chromaFromDB(fftDB, audioCtx.sampleRate);
+
       if(wasm){
         try{
           const r = wasm.analyze_chord(timeDomain, audioCtx.sampleRate);
-          res = {chord: r.chord, confidence: r.confidence};
+          // WASM 결과와 JS 결과 비교, 더 높은 confidence 사용
+          const jsRes = jsChord(chroma, bassChroma);
+          res = r.confidence > jsRes.confidence
+            ? {chord: r.chord, confidence: r.confidence}
+            : jsRes;
         }catch(e){
-          const c = chromaFromDB(fftDB, audioCtx.sampleRate);
-          res = jsChord(c);
+          res = jsChord(chroma, bassChroma);
         }
       } else {
-        const c = chromaFromDB(fftDB, audioCtx.sampleRate);
-        res = jsChord(c);
+        res = jsChord(chroma, bassChroma);
       }
 
       // 즉시 라이브 코드 업데이트 (비트 확정 전에 미리 표시)
-      if(res.confidence > 0.4){
+      if(res.confidence > 0.35){
         voteBuffer.push(res);
         liveChord = res.chord;
         liveConf = res.confidence;
-        // 상단 코드 즉시 갱신 (타임라인 재렌더 없이)
         document.getElementById('chordNowLabel').textContent = liveChord;
         document.getElementById('confFill').style.width = `${(liveConf * 100).toFixed(0)}%`;
       }
