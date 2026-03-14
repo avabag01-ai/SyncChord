@@ -442,79 +442,133 @@
       }
     }
 
-    // ── Essentia 기반 코드 인식 파이프라인 ──
-    const HPCP_WINDOW_SIZE = 10;
-    let hpcpFrameBuffer = [];
+    // ══════════════════════════════════════════════════════════════
+    // 코드 템플릿 매칭 (Essentia HPCP 기준: bin 0 = A)
+    // ★ 핵심: HPCP[0]=A, [1]=Bb, [2]=B, [3]=C, ... [11]=Ab
+    //   → C-based 인덱스를 A-based로 변환: +3 offset
+    // ══════════════════════════════════════════════════════════════
+    // C-based 음이름 (인덱스 0=C)
+    const NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+    // HPCP offset: C(note idx 0) → HPCP bin 3
+    const HPCP_A_OFFSET = 3;
+
+    const CHORD_TYPES = {
+      '':      [0,4,7],         // major triad
+      'm':     [0,3,7],         // minor triad
+      '7':     [0,4,7,10],      // dominant 7
+      'm7':    [0,3,7,10],      // minor 7
+      'dim':   [0,3,6],         // diminished
+      'sus4':  [0,5,7],         // sus4
+      '7sus4': [0,5,7,10],      // dominant 7 sus4
+      'maj7':  [0,4,7,11],      // major 7
+    };
+
+    const CHORD_TEMPLATES = [];
+    for(let root = 0; root < 12; root++){
+      for(const [suffix, intervals] of Object.entries(CHORD_TYPES)){
+        const tpl = new Float32Array(12);
+        for(let i = 0; i < intervals.length; i++){
+          // ★ C-based → A-based HPCP 변환 (+3)
+          const hpcpBin = (root + intervals[i] + HPCP_A_OFFSET) % 12;
+          tpl[hpcpBin] = i === 0 ? 1.0 : i < 2 ? 0.7 : 0.5;
+        }
+        const mx = Math.max(...tpl);
+        if(mx > 0) for(let k = 0; k < 12; k++) tpl[k] /= mx;
+
+        CHORD_TEMPLATES.push({
+          name: NOTE_NAMES[root] + suffix,
+          root, tpl,
+          nNotes: intervals.length
+        });
+      }
+    }
+
+    function cosineSim(a, b){
+      let dot=0, na=0, nb=0;
+      for(let i=0;i<12;i++){ dot+=a[i]*b[i]; na+=a[i]*a[i]; nb+=b[i]*b[i]; }
+      return dot / (Math.sqrt(na*nb) + 1e-10);
+    }
+
+    // ── Essentia HPCP → 코드 매칭 ──
+    const HPCP_WINDOW = 4; // ~370ms 평균
+    let hpcpBuf = [];
     let stableChord = '-';
     let stableCount = 0;
+    let frameCount = 0;
 
     function essentiaChordDetect(timeDomainData, sampleRate) {
       if (!essentiaReady || !essentia) return { chord: '-', confidence: 0 };
 
-      // WASM 벡터들을 추적해서 반드시 해제
       const toDelete = [];
       try {
         const inputVec = essentia.arrayToVector(timeDomainData);
         toDelete.push(inputVec);
 
-        const windowed = essentia.Windowing(inputVec, true, FRAME_SIZE, 'blackmanharris62', 0, true);
+        const windowed = essentia.Windowing(inputVec, true, FRAME_SIZE, 'hann', 0, true);
         toDelete.push(windowed.frame);
 
         const spectrum = essentia.Spectrum(windowed.frame, FRAME_SIZE);
         toDelete.push(spectrum.spectrum);
 
         const peaks = essentia.SpectralPeaks(spectrum.spectrum,
-          0.00001, 5000, 80, 40, 'magnitude', sampleRate);
+          0.00001, 5000, 60, 40, 'magnitude', sampleRate);
         toDelete.push(peaks.frequencies, peaks.magnitudes);
 
+        // Essentia HPCP — 12차원, A=bin0 기준
         const hpcp = essentia.HPCP(peaks.frequencies, peaks.magnitudes,
           true, 500, 4, 5000, false, 40, false, 'unitMax', 440, sampleRate, 12, 'squaredCosine', 1);
         toDelete.push(hpcp.hpcp);
 
-        const hpcpArray = essentia.vectorToArray(hpcp.hpcp);
+        const hpcpArr = essentia.vectorToArray(hpcp.hpcp);
 
-        // HPCP 프레임 버퍼 (윈도우 평균)
-        hpcpFrameBuffer.push(Array.from(hpcpArray));
-        if (hpcpFrameBuffer.length > HPCP_WINDOW_SIZE) hpcpFrameBuffer.shift();
+        // 프레임 버퍼 (짧은 윈도우)
+        hpcpBuf.push(Array.from(hpcpArr));
+        if (hpcpBuf.length > HPCP_WINDOW) hpcpBuf.shift();
 
-        // 평균 HPCP 계산
-        const avgHpcp = new Float32Array(12);
-        for (const frame of hpcpFrameBuffer) {
-          for (let i = 0; i < 12; i++) avgHpcp[i] += frame[i];
+        // 평균 HPCP
+        const avg = new Float32Array(12);
+        for(const f of hpcpBuf) for(let i=0;i<12;i++) avg[i] += f[i];
+        for(let i=0;i<12;i++) avg[i] /= hpcpBuf.length;
+        const mx = Math.max(...avg, 1e-6);
+        for(let i=0;i<12;i++) avg[i] /= mx;
+
+        // 템플릿 매칭
+        let bestChord = '-', bestScore = -1;
+        for(const t of CHORD_TEMPLATES){
+          let s = cosineSim(avg, t.tpl);
+          if(t.nNotes >= 4) s += 0.015; // 7th 코드 약간 보너스
+          if(s > bestScore){ bestScore = s; bestChord = t.name; }
         }
-        for (let i = 0; i < 12; i++) avgHpcp[i] /= hpcpFrameBuffer.length;
-        const mx = Math.max(...avgHpcp, 1e-6);
-        for (let i = 0; i < 12; i++) avgHpcp[i] /= mx;
+        const confidence = Math.max(0, Math.min(1, bestScore));
 
-        // Key 알고리즘 — edma 프로파일 (팝/록 최적화)
-        const avgVec = essentia.arrayToVector(avgHpcp);
-        toDelete.push(avgVec);
+        // 디버그: 매 20프레임마다 HPCP 로그
+        frameCount++;
+        if(frameCount % 20 === 0){
+          const binNames = ['A','Bb','B','C','C#','D','Eb','E','F','F#','G','Ab'];
+          const top3 = [...avg].map((v,i) => ({n:binNames[i],v}))
+            .sort((a,b) => b.v - a.v).slice(0,3)
+            .map(x => `${x.n}:${x.v.toFixed(2)}`).join(' ');
+          console.log(`[HPCP] ${top3} → ${bestChord} (${bestScore.toFixed(3)})`);
+        }
 
-        const keyResult = essentia.Key(avgVec, 4, 12, 'edma', 0.6, false, false, false);
-        const chordName = keyResult.scale === 'minor' ? keyResult.key + 'm' : keyResult.key;
-        const confidence = Math.max(0, Math.min(1, keyResult.strength));
-
-        // 히스테리시스: 연속 3회 이상 같은 코드여야 전환
-        if (chordName !== stableChord) {
+        // 히스테리시스: 2회 연속 달라야 전환
+        if(bestChord !== stableChord){
           stableCount++;
-          if (stableCount < 3 && stableChord !== '-') {
-            return { chord: stableChord, confidence: confidence * 0.7 };
+          if(stableCount < 2 && stableChord !== '-'){
+            return { chord: stableChord, confidence: confidence * 0.85 };
           }
-          stableChord = chordName;
+          stableChord = bestChord;
           stableCount = 0;
         } else {
           stableCount = 0;
         }
 
-        return { chord: chordName, confidence };
-      } catch (e) {
+        return { chord: bestChord, confidence };
+      } catch(e) {
         console.error('Essentia error:', e);
         return { chord: '-', confidence: 0 };
       } finally {
-        // 항상 메모리 해제 (early return 포함)
-        for (const v of toDelete) {
-          try { v.delete(); } catch(_){}
-        }
+        for(const v of toDelete){ try{v.delete();}catch(_){} }
       }
     }
 
@@ -640,7 +694,9 @@
 
     function chordRoot(name){
       if(!name || name === '-' || name === 'N/C') return '-';
-      return name.replace(/m$/, '');
+      // C#m7 → C#, Ebdim → Eb, Bbm → Bb, etc.
+      const m = name.match(/^([A-G][b#]?)/);
+      return m ? m[1] : '-';
     }
 
     function commitBeat(){
@@ -810,7 +866,7 @@
     function resetState(){
       beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
       prevSpectrum = null; beatPhaseOffset = 0; liveChord = '-';
-      hpcpFrameBuffer = []; stableChord = '-'; stableCount = 0;
+      hpcpBuf = []; stableChord = '-'; stableCount = 0; frameCount = 0;
     }
 
     async function startSystemAudio(){
@@ -936,7 +992,7 @@
     document.getElementById('btnJoin').addEventListener('click',async()=>{const c=document.getElementById('roomInput').value.trim();if(!c){log('방 코드를 입력하세요','warn');return;}try{if(!ws||ws.readyState!==1)await connectWS();ws.send(JSON.stringify({type:'join_room',roomCode:c,userId,nickname:userId}));}catch{}});
 
     loadEssentia();
-    log('SyncChord v5 — Essentia.js WASM + BPM 안정화');
+    log('SyncChord v6 — HPCP offset 수정 (A=bin0)');
   </script>
 </body>
 </html>
