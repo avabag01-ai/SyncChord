@@ -360,7 +360,7 @@
           <div class="metro-dot" id="md3"></div>
           <div class="metro-dot" id="md4"></div>
         </div>
-        <div class="bpm-label"><span id="bpmVal">80</span> <small>BPM</small></div>
+        <div class="bpm-label"><span id="bpmVal">72</span> <small>BPM</small></div>
       </div>
       <div class="sync-badge" id="syncBadge">
         <div class="sync-dot" id="syncDot"></div>
@@ -417,9 +417,8 @@
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // Essentia.js WASM 엔진 v4 — 실제 라이브러리 사용
-    // MTG, Universitat Pompeu Fabra (Barcelona) — AGPL-3.0
-    // Windowing → Spectrum → SpectralPeaks → HPCP → Key(tonictriad)
+    // Essentia.js WASM 엔진 v5 — 버그 수정 + BPM 안정화
+    // Windowing → Spectrum → SpectralPeaks → HPCP → Key(edma)
     // ══════════════════════════════════════════════════════════════════
     let essentia = null;
     let essentiaReady = false;
@@ -431,9 +430,10 @@
         const wasmModule = await EssentiaWASM();
         essentia = new Essentia(wasmModule, false);
         essentiaReady = true;
+        window._essentia = essentia; // 디버그용
         document.getElementById('wasmDot').classList.add('ok');
         document.getElementById('wasmLabel').textContent = `Essentia ${essentia.version} 로드 완료`;
-        log(`Essentia.js ${essentia.version} WASM 로드 성공 (${essentia.algorithmNames.split(';').length} 알고리즘)`);
+        log(`Essentia.js ${essentia.version} WASM 로드 성공`);
       } catch(e) {
         document.getElementById('wasmDot').classList.add('err');
         document.getElementById('wasmLabel').textContent = 'Essentia WASM 실패';
@@ -443,63 +443,37 @@
     }
 
     // ── Essentia 기반 코드 인식 파이프라인 ──
-    // HPCP 프레임 버퍼 (ChordsDetection처럼 윈도우 평균)
-    const HPCP_WINDOW_SIZE = 8; // 프레임 윈도우 크기
+    const HPCP_WINDOW_SIZE = 10;
     let hpcpFrameBuffer = [];
     let stableChord = '-';
+    let stableCount = 0;
 
     function essentiaChordDetect(timeDomainData, sampleRate) {
-      if (!essentiaReady || !essentia) {
-        return { chord: '-', confidence: 0 };
-      }
+      if (!essentiaReady || !essentia) return { chord: '-', confidence: 0 };
 
+      // WASM 벡터들을 추적해서 반드시 해제
+      const toDelete = [];
       try {
-        // 1. Float32Array → VectorFloat
         const inputVec = essentia.arrayToVector(timeDomainData);
+        toDelete.push(inputVec);
 
-        // 2. Windowing (Hann, normalized, zero-phase)
-        const windowed = essentia.Windowing(inputVec,
-          true,       // normalized
-          FRAME_SIZE, // size
-          'hann',     // type
-          0,          // zeroPadding
-          true        // zeroPhase
-        );
+        const windowed = essentia.Windowing(inputVec, true, FRAME_SIZE, 'blackmanharris62', 0, true);
+        toDelete.push(windowed.frame);
 
-        // 3. Spectrum
         const spectrum = essentia.Spectrum(windowed.frame, FRAME_SIZE);
+        toDelete.push(spectrum.spectrum);
 
-        // 4. SpectralPeaks (주파수 피크 추출)
         const peaks = essentia.SpectralPeaks(spectrum.spectrum,
-          0.0001,     // magnitudeThreshold (낮게 → 더 많은 피크)
-          5000,       // maxFrequency
-          60,         // maxPeaks
-          40,         // minFrequency
-          'magnitude', // orderBy
-          sampleRate   // sampleRate
-        );
+          0.00001, 5000, 80, 40, 'magnitude', sampleRate);
+        toDelete.push(peaks.frequencies, peaks.magnitudes);
 
-        // 5. HPCP (Harmonic Pitch Class Profile — 12차원)
         const hpcp = essentia.HPCP(peaks.frequencies, peaks.magnitudes,
-          true,             // bandPreset
-          500,              // bandSplitFrequency
-          4,                // harmonics (배음 기여도)
-          5000,             // maxFrequency
-          false,            // maxShifted
-          40,               // minFrequency
-          false,            // nonLinear
-          'unitMax',        // normalized
-          440,              // referenceFrequency
-          sampleRate,       // sampleRate
-          12,               // size (12 = 반음 단위)
-          'squaredCosine',  // weightType
-          1                 // windowSize (세미톤 단위)
-        );
+          true, 500, 4, 5000, false, 40, false, 'unitMax', 440, sampleRate, 12, 'squaredCosine', 1);
+        toDelete.push(hpcp.hpcp);
 
-        // HPCP를 JS 배열로 변환
         const hpcpArray = essentia.vectorToArray(hpcp.hpcp);
 
-        // 6. HPCP 프레임 버퍼에 추가 (ChordsDetection의 윈도우 평균 방식)
+        // HPCP 프레임 버퍼 (윈도우 평균)
         hpcpFrameBuffer.push(Array.from(hpcpArray));
         if (hpcpFrameBuffer.length > HPCP_WINDOW_SIZE) hpcpFrameBuffer.shift();
 
@@ -508,140 +482,136 @@
         for (const frame of hpcpFrameBuffer) {
           for (let i = 0; i < 12; i++) avgHpcp[i] += frame[i];
         }
-        const n = hpcpFrameBuffer.length;
-        for (let i = 0; i < 12; i++) avgHpcp[i] /= n;
-        // 정규화
+        for (let i = 0; i < 12; i++) avgHpcp[i] /= hpcpFrameBuffer.length;
         const mx = Math.max(...avgHpcp, 1e-6);
         for (let i = 0; i < 12; i++) avgHpcp[i] /= mx;
 
-        // 7. Key 알고리즘 (tonictriad 프로파일 — ChordsDetection과 동일 설정)
+        // Key 알고리즘 — edma 프로파일 (팝/록 최적화)
         const avgVec = essentia.arrayToVector(avgHpcp);
-        const keyResult = essentia.Key(avgVec,
-          4,            // numHarmonics
-          12,           // pcpSize
-          'tonictriad', // profileType (ChordsDetection 기본값)
-          0.6,          // slope
-          false,        // useMajMin
-          false,        // usePolyphony (ChordsDetection: false)
-          false         // useThreeChords
-        );
+        toDelete.push(avgVec);
 
-        const key = keyResult.key;
-        const scale = keyResult.scale;
-        const strength = keyResult.strength;
+        const keyResult = essentia.Key(avgVec, 4, 12, 'edma', 0.6, false, false, false);
+        const chordName = keyResult.scale === 'minor' ? keyResult.key + 'm' : keyResult.key;
+        const confidence = Math.max(0, Math.min(1, keyResult.strength));
 
-        // 코드명 조합
-        let chordName;
-        if (scale === 'minor') {
-          chordName = key + 'm';
+        // 히스테리시스: 연속 3회 이상 같은 코드여야 전환
+        if (chordName !== stableChord) {
+          stableCount++;
+          if (stableCount < 3 && stableChord !== '-') {
+            return { chord: stableChord, confidence: confidence * 0.7 };
+          }
+          stableChord = chordName;
+          stableCount = 0;
         } else {
-          chordName = key;
+          stableCount = 0;
         }
-        const confidence = Math.max(0, Math.min(1, strength));
-
-        // 히스테리시스 (급격한 변화 방지)
-        if (stableChord !== '-' && stableChord !== chordName && confidence < 0.55) {
-          return { chord: stableChord, confidence: confidence * 0.8 };
-        }
-        stableChord = chordName;
-
-        // 메모리 정리 (VectorFloat 해제)
-        inputVec.delete();
-        windowed.frame.delete();
-        spectrum.spectrum.delete();
-        peaks.frequencies.delete();
-        peaks.magnitudes.delete();
-        hpcp.hpcp.delete();
-        avgVec.delete();
 
         return { chord: chordName, confidence };
       } catch (e) {
-        console.error('Essentia chord detect error:', e);
+        console.error('Essentia error:', e);
         return { chord: '-', confidence: 0 };
-      }
-    }
-
-    // ── 자동 BPM 감지 (onset energy, 느린 발라드~빠른 팝 전부 지원) ──
-    let bpm = 80;
-    let bpmLocked = false;
-    let energyHistory = [];
-    let onsetTimes = [];
-    let bpmCandidates = [];
-
-    function detectBPMFromOnsets(){
-      if(onsetTimes.length < 6) return;
-      const intervals = [];
-      for(let i = 1; i < onsetTimes.length; i++){
-        const dt = onsetTimes[i] - onsetTimes[i-1];
-        if(dt > 150 && dt < 3000) intervals.push(dt);
-      }
-      if(intervals.length < 3) return;
-
-      const hist = {};
-      for(const dt of intervals){
-        const bucket = Math.round(dt / 20) * 20;
-        hist[bucket] = (hist[bucket] || 0) + 1;
-      }
-
-      const sorted = Object.entries(hist).sort((a,b) => b[1] - a[1]);
-      if(sorted.length === 0) return;
-
-      for(const [bucket, count] of sorted.slice(0, 3)){
-        const ms = Number(bucket);
-        if(ms < 150) continue;
-        let candidateBPM = Math.round(60000 / ms);
-        while(candidateBPM < 40) candidateBPM *= 2;
-        while(candidateBPM > 200) candidateBPM = Math.round(candidateBPM / 2);
-        if(candidateBPM >= 40 && candidateBPM <= 200) bpmCandidates.push(candidateBPM);
-      }
-
-      if(bpmCandidates.length > 20) bpmCandidates = bpmCandidates.slice(-20);
-      if(bpmCandidates.length >= 5 && !bpmLocked){
-        const sorted2 = [...bpmCandidates].sort((a,b) => a - b);
-        const median = sorted2[Math.floor(sorted2.length / 2)];
-        const nearby = bpmCandidates.filter(b => Math.abs(b - median) < 10);
-        if(nearby.length >= 3){
-          const avg = Math.round(nearby.reduce((a,b) => a+b, 0) / nearby.length);
-          const newBpm = Math.round(bpm * 0.6 + avg * 0.4);
-          if(Math.abs(newBpm - bpm) >= 2){
-            bpm = newBpm;
-            document.getElementById('bpmVal').textContent = bpm;
-            log(`BPM 감지: ${bpm}`, 'info');
-          }
+      } finally {
+        // 항상 메모리 해제 (early return 포함)
+        for (const v of toDelete) {
+          try { v.delete(); } catch(_){}
         }
       }
     }
 
-    // ── Onset 감지 ──
-    let prevEnergy = 0;
+    // ── BPM 감지 (개선: 자기상관 기반 + 배수/약수 보정) ──
+    let bpm = 72;
+    let bpmLocked = false;
+    let energyHistory = [];
+    let onsetTimes = [];
+
+    function detectBPMFromOnsets(){
+      if(onsetTimes.length < 8) return;
+
+      // 모든 IOI (Inter-Onset Interval) 수집
+      const intervals = [];
+      for(let i = 1; i < onsetTimes.length; i++){
+        const dt = onsetTimes[i] - onsetTimes[i-1];
+        if(dt > 200 && dt < 2000) intervals.push(dt);
+      }
+      if(intervals.length < 4) return;
+
+      // IOI 히스토그램 (30ms 버킷)
+      const hist = {};
+      for(const dt of intervals){
+        const bucket = Math.round(dt / 30) * 30;
+        hist[bucket] = (hist[bucket] || 0) + 1;
+      }
+
+      // 상위 후보 BPM 추출
+      const candidates = [];
+      const sorted = Object.entries(hist).sort((a,b) => b[1] - a[1]);
+      for(const [bucket, count] of sorted.slice(0, 5)){
+        const ms = Number(bucket);
+        if(ms < 200) continue;
+        let rawBPM = 60000 / ms;
+
+        // 50-160 BPM 범위로 정규화 (배수/약수 관계 보정)
+        while(rawBPM < 50) rawBPM *= 2;
+        while(rawBPM > 160) rawBPM /= 2;
+
+        candidates.push({ bpm: Math.round(rawBPM), count, ms });
+      }
+      if(candidates.length === 0) return;
+
+      // 가장 빈도 높은 후보 선택
+      candidates.sort((a,b) => b.count - a.count);
+      const bestCandidate = candidates[0].bpm;
+
+      // 현재 BPM과 비교: 배수 관계인 경우 낮은 쪽 선호 (발라드 보호)
+      if(!bpmLocked){
+        let newBpm = bestCandidate;
+
+        // 현재 BPM의 ~2배면 → 현재 유지 (더블타임 방지)
+        if(Math.abs(newBpm / bpm - 2) < 0.15) newBpm = bpm;
+        // 현재 BPM의 ~0.5배면 → 현재 유지
+        if(Math.abs(newBpm / bpm - 0.5) < 0.15) newBpm = bpm;
+
+        // 부드럽게 전환 (급변 방지)
+        const smoothed = Math.round(bpm * 0.7 + newBpm * 0.3);
+        if(Math.abs(smoothed - bpm) >= 2){
+          bpm = smoothed;
+          document.getElementById('bpmVal').textContent = bpm;
+          log(`BPM: ${bpm}`, 'info');
+        }
+      }
+    }
+
+    // ── Onset 감지 (개선: 스펙트럼 변화량 기반) ──
+    let prevSpectrum = null;
     let lastOnsetTime = 0;
     function detectOnset(fftDB){
+      // 스펙트럼 에너지
       let energy = 0;
       for(let i = 0; i < fftDB.length; i++){
-        if(fftDB[i] > -70) energy += Math.pow(10, fftDB[i] / 10);
+        if(fftDB[i] > -80) energy += Math.pow(10, fftDB[i] / 20);
       }
-      const energyDB = 10 * Math.log10(energy + 1e-10);
-      energyHistory.push(energyDB);
-      if(energyHistory.length > 150) energyHistory.shift();
+      energyHistory.push(energy);
+      if(energyHistory.length > 100) energyHistory.shift();
+      if(energyHistory.length < 10) return false;
 
       const avg = energyHistory.reduce((a,b) => a + b, 0) / energyHistory.length;
-      const threshold = avg + 2.5;
-      const isOnset = energyDB > threshold && energyDB - prevEnergy > 1.5;
-      prevEnergy = energyDB;
+      const stdDev = Math.sqrt(energyHistory.reduce((a,b) => a + (b-avg)**2, 0) / energyHistory.length);
+      const threshold = avg + stdDev * 1.5;
+      const isOnset = energy > threshold;
 
       if(isOnset){
         const now = performance.now();
-        if(now - lastOnsetTime > 100){
+        if(now - lastOnsetTime > 200){ // 최소 200ms 간격 (300 BPM 상한)
           onsetTimes.push(now);
           lastOnsetTime = now;
-          while(onsetTimes.length > 0 && now - onsetTimes[0] > 15000) onsetTimes.shift();
-          if(onsetTimes.length % 3 === 0) detectBPMFromOnsets();
+          while(onsetTimes.length > 0 && now - onsetTimes[0] > 20000) onsetTimes.shift();
+          if(onsetTimes.length % 4 === 0) detectBPMFromOnsets();
         }
       }
       return isOnset;
     }
 
-    // ── 비트 싱크 ──
+    // ── 비트 타이머 ──
     let lastBeatTime = 0;
     let beatPhaseOffset = 0;
 
@@ -649,10 +619,10 @@
       const beatMs = 60000 / bpm;
       const elapsed = onsetTime - lastBeatTime;
       const beatFraction = (elapsed % beatMs) / beatMs;
-      if(beatFraction < 0.15 || beatFraction > 0.85){
+      if(beatFraction < 0.12 || beatFraction > 0.88){
         beatPhaseOffset = beatFraction < 0.5
-          ? -beatFraction * beatMs * 0.3
-          : (1 - beatFraction) * beatMs * 0.3;
+          ? -beatFraction * beatMs * 0.2
+          : (1 - beatFraction) * beatMs * 0.2;
       }
     }
 
@@ -689,13 +659,13 @@
         chord = bestChord;
         conf = bestConf;
 
+        // 이전 박과 같은 코드가 충분히 나왔으면 유지
         const prevBeat = beatTimeline.length > 0 ? beatTimeline[beatTimeline.length-1] : null;
         if(prevBeat && prevBeat.chord !== '-'){
           const prevCount = counts[prevBeat.chord] || 0;
-          const prevRatio = prevCount / voteBuffer.length;
-          if(prevRatio > 0.3 && bestCount / voteBuffer.length - prevRatio < 0.2){
+          if(prevCount > 0 && bestCount - prevCount <= 1){
             chord = prevBeat.chord;
-            conf = Math.max(conf, prevBeat.conf * 0.9);
+            conf = Math.max(conf, prevBeat.conf * 0.85);
           }
         }
       }
@@ -786,9 +756,9 @@
       }
     }
 
-    // ── 분석 루프 (Essentia WASM 파이프라인) ──
+    // ── 분석 루프 (~93ms = 4096/44100, 새 오디오 프레임마다 1회) ──
     let audioCtx, analyser, isAnalyzing = false;
-    let scriptNode = null; // ScriptProcessorNode for raw PCM access
+    const ANALYSIS_INTERVAL = 93; // 4096 samples / 44100 Hz ≈ 93ms
 
     function doAnalysis(){
       if(!isAnalyzing) return;
@@ -796,21 +766,28 @@
       const fftDB = new Float32Array(analyser.frequencyBinCount);
       analyser.getFloatFrequencyData(fftDB);
 
-      // Onset 감지 → BPM
+      // Onset → BPM
       const isOnset = detectOnset(fftDB);
       if(isOnset) snapBeatToOnset(performance.now());
 
-      // 코드 인식: time domain 데이터를 Essentia 파이프라인에 전달
+      // Essentia 코드 인식
       const timeDomain = new Float32Array(analyser.fftSize);
       analyser.getFloatTimeDomainData(timeDomain);
-      const res = essentiaChordDetect(timeDomain, audioCtx.sampleRate);
 
-      if(res.confidence > 0.3){
-        voteBuffer.push(res);
-        liveChord = res.chord;
-        liveConf = res.confidence;
-        document.getElementById('chordNowLabel').textContent = liveChord;
-        document.getElementById('confFill').style.width = `${(liveConf * 100).toFixed(0)}%`;
+      // 무음 체크 (RMS < threshold → 스킵)
+      let rms = 0;
+      for(let i = 0; i < timeDomain.length; i++) rms += timeDomain[i] * timeDomain[i];
+      rms = Math.sqrt(rms / timeDomain.length);
+
+      if(rms > 0.005) { // 무음이 아닐 때만 분석
+        const res = essentiaChordDetect(timeDomain, audioCtx.sampleRate);
+        if(res.confidence > 0.25){
+          voteBuffer.push(res);
+          liveChord = res.chord;
+          liveConf = res.confidence;
+          document.getElementById('chordNowLabel').textContent = liveChord;
+          document.getElementById('confFill').style.width = `${(liveConf * 100).toFixed(0)}%`;
+        }
       }
 
       // 비트 타이머
@@ -823,7 +800,7 @@
         beatPhaseOffset *= 0.5;
       }
 
-      setTimeout(()=>requestAnimationFrame(doAnalysis), 30);
+      setTimeout(()=>requestAnimationFrame(doAnalysis), ANALYSIS_INTERVAL);
     }
 
     function extractId(url){const m=url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
@@ -832,8 +809,8 @@
 
     function resetState(){
       beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
-      prevEnergy = 0; beatPhaseOffset = 0; liveChord = '-';
-      hpcpFrameBuffer = []; stableChord = '-'; bpmCandidates = [];
+      prevSpectrum = null; beatPhaseOffset = 0; liveChord = '-';
+      hpcpFrameBuffer = []; stableChord = '-'; stableCount = 0;
     }
 
     async function startSystemAudio(){
@@ -847,19 +824,17 @@
         const src = audioCtx.createMediaStreamSource(captureStream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = FRAME_SIZE;
-        analyser.smoothingTimeConstant = 0.0; // 스무딩 OFF (정확한 스펙트럼)
+        analyser.smoothingTimeConstant = 0.0;
         src.connect(analyser);
         captureStream.getVideoTracks().forEach(t=>t.stop());
         isAnalyzing = true;
         lastBeatTime = performance.now();
         resetState();
         document.getElementById('btnSystem').textContent='⏹ 캡처 중지';
-        log(`오디오 캡처 시작 — Essentia ${essentia.version} WASM 엔진`);
-        log(`FFT ${FRAME_SIZE}, SR ${audioCtx.sampleRate}Hz, HPCP 윈도우 ${HPCP_WINDOW_SIZE}프레임`);
+        log(`오디오 캡처 — Essentia WASM (edma profile, ${FRAME_SIZE}pt FFT)`);
         doAnalysis();
         captureStream.getAudioTracks()[0].onended = ()=>{
-          stopAnalysis();
-          log('오디오 캡처 종료됨','warn');
+          stopAnalysis(); log('오디오 캡처 종료','warn');
         };
       }catch(e){
         log('오디오 캡처 실패: '+e.message,'error');
@@ -881,7 +856,7 @@
         lastBeatTime = performance.now();
         resetState();
         document.getElementById('btnMic').textContent='⏹ 중지';
-        log(`마이크 캡처 시작 — Essentia ${essentia.version} WASM 엔진`);
+        log(`마이크 캡처 — Essentia WASM`);
         doAnalysis();
       }catch(e){log('마이크 실패: '+e.message,'error');}
     }
@@ -960,10 +935,8 @@
     document.getElementById('btnCreate').addEventListener('click',async()=>{try{if(!ws||ws.readyState!==1)await connectWS();const c=Math.random().toString(36).slice(2,8).toUpperCase();document.getElementById('roomInput').value=c;ws.send(JSON.stringify({type:'create_room',roomCode:c,userId,nickname:userId}));}catch{}});
     document.getElementById('btnJoin').addEventListener('click',async()=>{const c=document.getElementById('roomInput').value.trim();if(!c){log('방 코드를 입력하세요','warn');return;}try{if(!ws||ws.readyState!==1)await connectWS();ws.send(JSON.stringify({type:'join_room',roomCode:c,userId,nickname:userId}));}catch{}});
 
-    // Essentia WASM 초기화
     loadEssentia();
-    log('SyncChord v4 — Essentia.js WASM 엔진');
-    log('자동 BPM 감지 + 실제 HPCP/Key 알고리즘');
+    log('SyncChord v5 — Essentia.js WASM + BPM 안정화');
   </script>
 </body>
 </html>
