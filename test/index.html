@@ -426,13 +426,9 @@
       }
     }
 
+    // ── 코드 인식 엔진 ──
     const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
     const MAJ=[1,0,0,0,1,0,0,1,0,0,0,0], MIN=[1,0,0,1,0,0,0,1,0,0,0,0];
-    function jsChroma(fft,sr){
-      const c=new Float32Array(12), bh=sr/(fft.length*2);
-      for(let i=1;i<fft.length;i++){const f=i*bh;if(f<65||f>2100)continue;const p=Math.round(12*Math.log2(f/440)+69)%12;if(p>=0&&p<12)c[p]+=fft[i]*fft[i];}
-      const mx=Math.max(...c,0.001);for(let i=0;i<12;i++)c[i]/=mx;return c;
-    }
     function jsChord(c){
       let best='N/C',bs=-1;
       for(let r=0;r<12;r++)for(const[t,s]of[[MAJ,''],[MIN,'m']]){
@@ -441,138 +437,6 @@
       }
       return{chord:best,confidence:bs};
     }
-
-    // ── Chordify 스타일 타임라인 (1 beat = 1 cell, 4 beats/bar) ──
-    // beatTimeline[i] = { chord, conf } — 각 비트의 코드
-    let beatTimeline = [];   // 과거+현재 비트 배열
-    let voteBuffer = [];
-    let lastBeatTime = 0;
-    let currentDisplayChord = '-';
-    let currentBeatInBar = 0; // 0~3 (4/4박자)
-
-    const BEAT_W = 56;  // 1 비트 셀 너비(px)
-    const PLAYHEAD_PCT = 0.25; // 플레이헤드 위치 (25% — 오른쪽에 미래 코드 미리보기)
-    const BEATS_PER_BAR = 4;
-
-    function getBeatMs(){
-      return 60000 / bpm; // 1 beat = 60000/BPM ms
-    }
-
-    function chordRoot(name){
-      if(!name || name === '-' || name === 'N/C') return '-';
-      return name.replace(/m$/, '');
-    }
-
-    function commitBeat(){
-      // 투표: 이 비트 동안 가장 많이 감지된 코드
-      let chord = '-', conf = 0;
-      if(voteBuffer.length > 0){
-        const counts = {};
-        let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
-        for(const v of voteBuffer){
-          counts[v.chord] = (counts[v.chord] || 0) + 1;
-          if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
-            bestCount = counts[v.chord];
-            bestChord = v.chord;
-            bestConf = v.confidence;
-          }
-        }
-        chord = bestChord;
-        conf = bestConf;
-      }
-
-      beatTimeline.push({ chord, conf });
-      currentDisplayChord = chord;
-      currentBeatInBar = (beatTimeline.length - 1) % BEATS_PER_BAR;
-      voteBuffer = [];
-      renderTimeline(conf);
-    }
-
-    function renderTimeline(conf){
-      const track = document.getElementById('timelineTrack');
-      const container = document.getElementById('timelineContainer');
-      const barRow = document.getElementById('barNumbers');
-      const containerW = container.clientWidth;
-      const totalBeats = beatTimeline.length;
-
-      // 미래 빈 비트 수 (화면 오른쪽 75% 채우기)
-      const futureBeats = Math.ceil(containerW * (1 - PLAYHEAD_PCT) / BEAT_W) + 4;
-      const allBeats = totalBeats + futureBeats;
-
-      // 블록 HTML — 비트별 셀
-      let html = '';
-      for(let i = 0; i < allBeats; i++){
-        const isPast = i < totalBeats - 1;
-        const isCurrent = i === totalBeats - 1;
-        const isFuture = i >= totalBeats;
-        const beatInBar = i % BEATS_PER_BAR;
-        const isBarStart = beatInBar === 0;
-
-        let cls = isCurrent ? 'current' : isPast ? 'past' : 'future-empty';
-        if(isBarStart) cls += ' bar-start';
-
-        if(isFuture){
-          // 미래 빈 셀
-          const root = '-';
-          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
-            <span class="chord-label continuation">·</span>
-          </div>`;
-        } else {
-          const b = beatTimeline[i];
-          const root = chordRoot(b.chord);
-          // 같은 코드 연속인지 확인 — 연속이면 첫 번째만 이름, 나머지는 ─
-          const prevChord = i > 0 ? beatTimeline[i-1].chord : null;
-          const isContinuation = !isBarStart && b.chord === prevChord && !isCurrent;
-          const label = isContinuation
-            ? `<span class="chord-label continuation">─</span>`
-            : `<span class="chord-label">${b.chord}</span>`;
-          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
-            ${label}
-          </div>`;
-        }
-      }
-      track.innerHTML = html;
-
-      // 스크롤: 현재 비트가 플레이헤드(25%) 위치에 오도록
-      const playheadX = containerW * PLAYHEAD_PCT;
-      const currentCenter = (totalBeats - 0.5) * BEAT_W;
-      const offset = currentCenter - playheadX;
-      track.style.transform = `translateX(${-offset}px)`;
-
-      // 마디 번호 바
-      let barHtml = '';
-      for(let i = 0; i < allBeats; i++){
-        const beatInBar = i % BEATS_PER_BAR;
-        const barNum = Math.floor(i / BEATS_PER_BAR) + 1;
-        const isCurrent = i === totalBeats - 1;
-        // 첫 박에만 마디 번호, 나머지는 박 번호 (1~4)
-        const txt = beatInBar === 0
-          ? `<b>${barNum}</b>`
-          : `${beatInBar + 1}`;
-        barHtml += `<div class="bar-num ${isCurrent ? 'current' : ''}" style="width:${BEAT_W}px">${txt}</div>`;
-      }
-      barRow.innerHTML = barHtml;
-      barRow.style.position = 'relative';
-      barRow.style.transform = `translateX(${-offset}px)`;
-      barRow.style.width = `${allBeats * BEAT_W}px`;
-
-      // 상단 현재 코드 + 메타
-      document.getElementById('chordNowLabel').textContent = currentDisplayChord;
-      const type = currentDisplayChord.endsWith('m') ? 'minor' :
-                   currentDisplayChord === '-' || currentDisplayChord === 'N/C' ? '' : 'major';
-      document.getElementById('chordNowType').textContent =
-        type ? `${type}  |  마디 ${Math.floor((totalBeats-1)/4)+1}  박 ${currentBeatInBar+1}` : `마디 ${Math.floor((totalBeats-1)/4)+1}`;
-      document.getElementById('confFill').style.width = `${(conf * 100).toFixed(0)}%`;
-
-      // 메트로놈 dot 연동
-      for(let i = 1; i <= 4; i++){
-        document.getElementById('md'+i).classList.toggle('on', i === currentBeatInBar + 1);
-      }
-    }
-
-    let audioCtx,analyser,isAnalyzing=false;
-
-    // dB 스펙트럼에서 직접 chroma 계산
     function chromaFromDB(fftDB, sr){
       const chroma = new Float64Array(12);
       const binHz = sr / (fftDB.length * 2);
@@ -591,6 +455,225 @@
       return chroma;
     }
 
+    // ── 자동 BPM 감지 (onset energy autocorrelation) ──
+    let bpm = 120;
+    let bpmLocked = false;      // 사용자가 수동 조절하면 자동감지 잠금
+    let energyHistory = [];     // 최근 에너지 값 (onset 감지용)
+    let onsetTimes = [];        // onset 시각 배열 (BPM 계산용)
+
+    function detectBPMFromOnsets(){
+      if(onsetTimes.length < 8) return; // 최소 8개 onset 필요
+      // 인접 onset 간격으로 IOI (Inter-Onset Interval) 계산
+      const intervals = [];
+      for(let i = 1; i < onsetTimes.length; i++){
+        const dt = onsetTimes[i] - onsetTimes[i-1];
+        if(dt > 200 && dt < 2000) intervals.push(dt); // 30~300 BPM 범위
+      }
+      if(intervals.length < 4) return;
+
+      // IOI 히스토그램 (10ms 단위) → 가장 많은 간격 찾기
+      const hist = {};
+      for(const dt of intervals){
+        const bucket = Math.round(dt / 10) * 10;
+        hist[bucket] = (hist[bucket] || 0) + 1;
+      }
+      // 가장 많은 간격 + 그 절반/배수도 고려
+      let bestBucket = 0, bestCount = 0;
+      for(const [b, c] of Object.entries(hist)){
+        if(c > bestCount){ bestCount = c; bestBucket = Number(b); }
+      }
+      if(bestBucket < 200) return;
+
+      const detectedBPM = Math.round(60000 / bestBucket);
+      // 60~200 BPM 범위로 정규화
+      let normalized = detectedBPM;
+      if(normalized < 60) normalized *= 2;
+      if(normalized > 200) normalized = Math.round(normalized / 2);
+      if(normalized >= 60 && normalized <= 200 && !bpmLocked){
+        // 급격한 변화 방지: 이전 BPM과 20% 이상 차이 나면 점진적 변경
+        const diff = Math.abs(normalized - bpm);
+        if(diff > bpm * 0.2 && beatTimeline.length > 16){
+          bpm = Math.round(bpm + (normalized - bpm) * 0.3);
+        } else {
+          bpm = normalized;
+        }
+        document.getElementById('bpmVal').textContent = bpm;
+      }
+    }
+
+    // ── Onset 감지 (에너지 기반) ──
+    let prevEnergy = 0;
+    function detectOnset(fftDB){
+      // 전체 주파수 에너지 합산
+      let energy = 0;
+      for(let i = 0; i < fftDB.length; i++){
+        if(fftDB[i] > -80) energy += Math.pow(10, fftDB[i] / 10);
+      }
+      const energyDB = 10 * Math.log10(energy + 1e-10);
+      energyHistory.push(energyDB);
+      if(energyHistory.length > 100) energyHistory.shift(); // 최근 5초 (50ms × 100)
+
+      // 평균 에너지 대비 급상승 = onset
+      const avg = energyHistory.reduce((a,b) => a + b, 0) / energyHistory.length;
+      const threshold = avg + 3; // 3dB 이상 급상승
+      const isOnset = energyDB > threshold && energyDB - prevEnergy > 2;
+      prevEnergy = energyDB;
+
+      if(isOnset){
+        const now = performance.now();
+        onsetTimes.push(now);
+        // 최근 10초만 유지
+        while(onsetTimes.length > 0 && now - onsetTimes[0] > 10000){
+          onsetTimes.shift();
+        }
+        // 주기적으로 BPM 재계산
+        if(onsetTimes.length % 4 === 0) detectBPMFromOnsets();
+      }
+      return isOnset;
+    }
+
+    // ── 비트 싱크 타이머 (onset에 위상 맞춤) ──
+    let lastBeatTime = 0;
+    let beatPhaseOffset = 0; // onset으로부터의 위상 보정값
+
+    function snapBeatToOnset(onsetTime){
+      // 가장 가까운 비트 경계와 onset 시점의 차이로 위상 보정
+      const beatMs = 60000 / bpm;
+      const elapsed = onsetTime - lastBeatTime;
+      const beatFraction = (elapsed % beatMs) / beatMs;
+      // onset이 비트 경계 근처 (±20%)면 싱크 조정
+      if(beatFraction < 0.2 || beatFraction > 0.8){
+        beatPhaseOffset = beatFraction < 0.5
+          ? -beatFraction * beatMs * 0.5    // onset이 비트 직후 → 약간 앞으로
+          : (1 - beatFraction) * beatMs * 0.5; // onset이 비트 직전 → 약간 뒤로
+      }
+    }
+
+    // ── Chordify 스타일 타임라인 ──
+    let beatTimeline = [];
+    let voteBuffer = [];
+    let currentDisplayChord = '-';
+    let currentBeatInBar = 0;
+    let liveChord = '-';       // 실시간 코드 (비트 확정 전에 즉시 표시)
+    let liveConf = 0;
+
+    const BEAT_W = 56;
+    const PLAYHEAD_PCT = 0.25;
+    const BEATS_PER_BAR = 4;
+
+    function chordRoot(name){
+      if(!name || name === '-' || name === 'N/C') return '-';
+      return name.replace(/m$/, '');
+    }
+
+    function commitBeat(){
+      let chord = '-', conf = 0;
+      if(voteBuffer.length > 0){
+        const counts = {};
+        let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
+        for(const v of voteBuffer){
+          counts[v.chord] = (counts[v.chord] || 0) + 1;
+          if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
+            bestCount = counts[v.chord];
+            bestChord = v.chord;
+            bestConf = v.confidence;
+          }
+        }
+        chord = bestChord;
+        conf = bestConf;
+      }
+      beatTimeline.push({ chord, conf });
+      currentDisplayChord = chord;
+      currentBeatInBar = (beatTimeline.length - 1) % BEATS_PER_BAR;
+      voteBuffer = [];
+      renderTimeline(conf);
+    }
+
+    function renderTimeline(conf){
+      const track = document.getElementById('timelineTrack');
+      const container = document.getElementById('timelineContainer');
+      const barRow = document.getElementById('barNumbers');
+      const containerW = container.clientWidth;
+      const totalBeats = beatTimeline.length;
+
+      const futureBeats = Math.ceil(containerW * (1 - PLAYHEAD_PCT) / BEAT_W) + 4;
+      const allBeats = totalBeats + futureBeats;
+
+      let html = '';
+      for(let i = 0; i < allBeats; i++){
+        const isPast = i < totalBeats - 1;
+        const isCurrent = i === totalBeats - 1;
+        const isFuture = i >= totalBeats;
+        const beatInBar = i % BEATS_PER_BAR;
+        const isBarStart = beatInBar === 0;
+
+        let cls = isCurrent ? 'current' : isPast ? 'past' : 'future-empty';
+        if(isBarStart) cls += ' bar-start';
+
+        if(isFuture){
+          // 미래 셀: 첫 번째 미래 셀에 liveChord 미리보기
+          const isNext = i === totalBeats;
+          if(isNext && liveChord !== '-'){
+            const root = chordRoot(liveChord);
+            html += `<div class="chord-block future" data-root="${root}" style="width:${BEAT_W}px">
+              <span class="chord-label">${liveChord}</span>
+            </div>`;
+          } else {
+            html += `<div class="chord-block ${cls}" data-root="-" style="width:${BEAT_W}px">
+              <span class="chord-label continuation">·</span>
+            </div>`;
+          }
+        } else {
+          const b = beatTimeline[i];
+          const root = chordRoot(b.chord);
+          const prevChord = i > 0 ? beatTimeline[i-1].chord : null;
+          const isContinuation = !isBarStart && b.chord === prevChord && !isCurrent;
+          const label = isContinuation
+            ? `<span class="chord-label continuation">─</span>`
+            : `<span class="chord-label">${b.chord}</span>`;
+          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
+            ${label}
+          </div>`;
+        }
+      }
+      track.innerHTML = html;
+
+      const playheadX = containerW * PLAYHEAD_PCT;
+      const currentCenter = (totalBeats - 0.5) * BEAT_W;
+      const offset = currentCenter - playheadX;
+      track.style.transform = `translateX(${-offset}px)`;
+
+      let barHtml = '';
+      for(let i = 0; i < allBeats; i++){
+        const beatInBar = i % BEATS_PER_BAR;
+        const barNum = Math.floor(i / BEATS_PER_BAR) + 1;
+        const isCurr = i === totalBeats - 1;
+        const txt = beatInBar === 0 ? `<b>${barNum}</b>` : `${beatInBar + 1}`;
+        barHtml += `<div class="bar-num ${isCurr ? 'current' : ''}" style="width:${BEAT_W}px">${txt}</div>`;
+      }
+      barRow.innerHTML = barHtml;
+      barRow.style.position = 'relative';
+      barRow.style.transform = `translateX(${-offset}px)`;
+      barRow.style.width = `${allBeats * BEAT_W}px`;
+
+      // 상단 현재 코드 (즉시 반영 — liveChord 사용)
+      const displayChord = liveChord !== '-' ? liveChord : currentDisplayChord;
+      document.getElementById('chordNowLabel').textContent = displayChord;
+      const type = displayChord.endsWith('m') ? 'minor' :
+                   displayChord === '-' || displayChord === 'N/C' ? '' : 'major';
+      document.getElementById('chordNowType').textContent =
+        type ? `${type}  |  마디 ${Math.floor((totalBeats-1)/4)+1}  박 ${currentBeatInBar+1}  |  ${bpm} BPM`
+             : `마디 ${Math.floor(Math.max(0,totalBeats-1)/4)+1}  |  ${bpm} BPM`;
+      document.getElementById('confFill').style.width = `${(conf * 100).toFixed(0)}%`;
+
+      for(let i = 1; i <= 4; i++){
+        document.getElementById('md'+i).classList.toggle('on', i === currentBeatInBar + 1);
+      }
+    }
+
+    // ── 분석 루프 (30ms 간격 고속 샘플링) ──
+    let audioCtx,analyser,isAnalyzing=false;
+
     function doAnalysis(){
       if(!isAnalyzing)return;
 
@@ -599,6 +682,11 @@
       const fftDB = new Float32Array(analyser.frequencyBinCount);
       analyser.getFloatFrequencyData(fftDB);
 
+      // Onset 감지 → BPM 자동 계산 + 비트 위상 보정
+      const isOnset = detectOnset(fftDB);
+      if(isOnset) snapBeatToOnset(performance.now());
+
+      // 코드 인식
       let res;
       if(wasm){
         try{
@@ -613,56 +701,61 @@
         res = jsChord(c);
       }
 
-      // 투표 버퍼에 추가 (confidence 임계값 이상만)
-      if(res.confidence > 0.3){
+      // 즉시 라이브 코드 업데이트 (비트 확정 전에 미리 표시)
+      if(res.confidence > 0.4){
         voteBuffer.push(res);
+        liveChord = res.chord;
+        liveConf = res.confidence;
+        // 상단 코드 즉시 갱신 (타임라인 재렌더 없이)
+        document.getElementById('chordNowLabel').textContent = liveChord;
+        document.getElementById('confFill').style.width = `${(liveConf * 100).toFixed(0)}%`;
       }
 
-      // 1 beat 경과 시 코드 확정 (4/4 → 한 마디에 4칸)
+      // 비트 타이머: BPM 기반 + 위상 보정
       const now = performance.now();
-      if(now - lastBeatTime >= getBeatMs()){
+      const beatMs = 60000 / bpm;
+      const adjusted = beatMs + beatPhaseOffset;
+      if(now - lastBeatTime >= adjusted){
         commitBeat();
         lastBeatTime = now;
+        beatPhaseOffset *= 0.5; // 위상 보정 점진적 감소
       }
 
-      // ~50ms 간격으로 분석 (빠르게 샘플링, 느리게 출력)
-      setTimeout(()=>requestAnimationFrame(doAnalysis), 50);
+      setTimeout(()=>requestAnimationFrame(doAnalysis), 30);
     }
 
     function extractId(url){const m=url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
 
     let captureStream = null;
 
-    // 시스템 오디오 캡처 (헤드폰 OK, getDisplayMedia)
     async function startSystemAudio(){
       if(isAnalyzing)return;
       try{
-        // 탭 오디오만 캡처 (화면 공유 팝업에서 "탭" 선택)
         captureStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true, // 필수 (Chrome 정책), 실제로는 안 씀
-          audio: true  // 시스템/탭 오디오 캡처
+          video: true, audio: true
         });
         audioCtx=new AudioContext();
         const src=audioCtx.createMediaStreamSource(captureStream);
         analyser=audioCtx.createAnalyser();analyser.fftSize=4096;
         src.connect(analyser);
-        // 비디오 트랙은 필요 없으므로 중지
         captureStream.getVideoTracks().forEach(t=>t.stop());
         isAnalyzing=true;
+        lastBeatTime = performance.now();
+        // 초기화
+        beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
+        prevEnergy = 0; beatPhaseOffset = 0; liveChord = '-';
         document.getElementById('btnSystem').textContent='⏹ 캡처 중지';
-        log('🔊 시스템 오디오 캡처 시작 — 헤드폰에서도 분석 가능!');
+        log(`🔊 오디오 캡처 시작 — 자동 BPM 감지 중 (초기 ${bpm} BPM)`);
         doAnalysis();
-        // 사용자가 공유 중지하면 자동 정지
         captureStream.getAudioTracks()[0].onended = ()=>{
           stopAnalysis();
           log('오디오 캡처 종료됨','warn');
         };
       }catch(e){
-        log('시스템 오디오 캡처 실패: '+e.message+' — 공유 팝업에서 "탭 오디오 공유"를 체크하세요','error');
+        log('오디오 캡처 실패: '+e.message,'error');
       }
     }
 
-    // 마이크 캡처 (폴백)
     async function startMic(){
       if(isAnalyzing)return;
       try{
@@ -671,8 +764,11 @@
         const src=audioCtx.createMediaStreamSource(stream);
         analyser=audioCtx.createAnalyser();analyser.fftSize=4096;
         src.connect(analyser);isAnalyzing=true;
+        lastBeatTime = performance.now();
+        beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
+        prevEnergy = 0; beatPhaseOffset = 0; liveChord = '-';
         document.getElementById('btnMic').textContent='⏹ 중지';
-        log('🎤 마이크 캡처 시작 — 스피커 소리를 분석합니다');
+        log(`🎤 마이크 캡처 시작 — 자동 BPM 감지 중 (초기 ${bpm} BPM)`);
         doAnalysis();
       }catch(e){log('마이크 실패: '+e.message,'error');}
     }
@@ -688,7 +784,7 @@
       document.getElementById('playerWrapper').innerHTML=
         `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1" allow="autoplay; encrypted-media; microphone" allowfullscreen></iframe>`;
       log(`YouTube 로드: ${id}`);
-      log('💡 "오디오 캡처" 버튼을 눌러 코드 분석을 시작하세요 (헤드폰 OK)', 'warn');
+      log('💡 "오디오 캡처" 눌러서 코드 분석 시작 (헤드폰 OK)', 'warn');
     }
 
     document.getElementById('btnLoad').addEventListener('click',()=>{
@@ -714,7 +810,7 @@
       else startMic();
     });
 
-    let metroInt=null,beat=0,bpm=120;
+    let metroInt=null,beat=0;
     function tick(){
       beat=(beat%4)+1;
       for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.toggle('on',i===beat);
@@ -728,8 +824,8 @@
         for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.remove('on');beat=0;}
       else{metroInt=setInterval(tick,60000/bpm);document.getElementById('btnMetro').textContent='⏸ 정지';log(`메트로놈 ${bpm} BPM`);}
     });
-    document.getElementById('bpmDn').addEventListener('click',()=>{bpm=Math.max(30,bpm-5);document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}});
-    document.getElementById('bpmUp').addEventListener('click',()=>{bpm=Math.min(300,bpm+5);document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}});
+    document.getElementById('bpmDn').addEventListener('click',()=>{bpm=Math.max(30,bpm-5);bpmLocked=true;document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}log(`BPM 수동: ${bpm} (자동감지 잠금)`,'warn');});
+    document.getElementById('bpmUp').addEventListener('click',()=>{bpm=Math.min(300,bpm+5);bpmLocked=true;document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}log(`BPM 수동: ${bpm} (자동감지 잠금)`,'warn');});
 
     let ws=null,currentRoom=null;const userId='user_'+Math.random().toString(36).slice(2,8);
     function connectWS(){
@@ -753,6 +849,7 @@
 
     loadWasm();
     log('SyncChord 준비 완료 — YouTube URL 또는 프리셋 클릭');
+    log('💡 자동 BPM 감지 활성화 — 곡 템포에 맞춰 코드 표시');
   </script>
 </body>
 </html>
