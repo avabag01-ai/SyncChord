@@ -3,4 +3,6 @@ node_modules/
 pkg/
 dist/
 *.wasm
+# essentia.js WASM 바이너리는 추적 필요
+!test/essentia/*.wasm
 .DS_Store
