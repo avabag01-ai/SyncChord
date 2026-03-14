@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SyncChord — YouTube 실시간 코드 분석</title>
+  <title>SyncChord — 코드 분석</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -18,110 +18,123 @@
     }
 
     .header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
-      width: 100%;
-      max-width: 900px;
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 16px; width: 100%; max-width: 960px;
     }
     h1 {
       font-size: 1.5rem;
       background: linear-gradient(135deg, #ff6b35, #f7c948);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .header-sub { color: #888; font-size: 0.85rem; }
 
+    /* ── 입력 영역 ── */
+    .input-section {
+      width: 100%; max-width: 960px;
+      margin-bottom: 16px;
+    }
+    .tab-bar {
+      display: flex; gap: 0; margin-bottom: 0;
+    }
+    .tab-btn {
+      padding: 10px 20px; border: 1px solid #3a3a5a;
+      background: #1a1a2e; color: #888; cursor: pointer;
+      font-size: 0.85rem; font-weight: 600;
+      border-bottom: none;
+    }
+    .tab-btn:first-child { border-radius: 8px 0 0 0; }
+    .tab-btn:last-child { border-radius: 0 8px 0 0; }
+    .tab-btn.active { background: #16161e; color: #ff6b35; border-bottom-color: #16161e; }
+    .tab-content {
+      background: #16161e; border: 1px solid #3a3a5a;
+      border-radius: 0 8px 8px 8px; padding: 16px;
+      display: none;
+    }
+    .tab-content.active { display: block; }
+
+    /* 파일 업로드 */
+    .file-drop {
+      border: 2px dashed #3a3a5a; border-radius: 8px;
+      padding: 30px; text-align: center; cursor: pointer;
+      transition: all 0.2s; color: #666;
+    }
+    .file-drop:hover, .file-drop.dragover {
+      border-color: #ff6b35; color: #ff6b35; background: rgba(255,107,53,0.05);
+    }
+    .file-drop .icon { font-size: 2rem; margin-bottom: 8px; }
+    .file-drop input { display: none; }
+
+    /* 유튜브 */
     .url-bar {
-      display: flex;
-      gap: 8px;
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 12px;
+      display: flex; gap: 8px; margin-bottom: 10px;
     }
     .url-bar input {
-      flex: 1;
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid #3a3a5a;
-      background: #1a1a2e;
-      color: #e1e1e1;
-      font-size: 0.9rem;
+      flex: 1; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid #3a3a5a; background: #1a1a2e;
+      color: #e1e1e1; font-size: 0.9rem;
     }
     .url-bar input::placeholder { color: #666; }
-    .url-bar button {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      background: linear-gradient(135deg, #ff6b35, #e85d26);
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .presets {
-      display: flex;
-      gap: 6px;
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
+    .presets { display: flex; gap: 6px; flex-wrap: wrap; }
     .preset-btn {
-      padding: 5px 12px;
-      font-size: 0.75rem;
-      border-radius: 14px;
-      background: #111;
-      border: 1px solid #2a2a4a;
-      color: #aaa;
-      cursor: pointer;
+      padding: 5px 12px; font-size: 0.75rem; border-radius: 14px;
+      background: #111; border: 1px solid #2a2a4a; color: #aaa; cursor: pointer;
     }
     .preset-btn:hover { border-color: #ff6b35; color: #ff6b35; }
 
+    /* ── 플레이어 / 오디오 ── */
     .player-wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 900px;
-      aspect-ratio: 16/9;
-      background: #000;
-      border-radius: 12px 12px 0 0;
-      overflow: hidden;
+      position: relative; width: 100%; max-width: 960px;
+      background: #000; border-radius: 12px 12px 0 0; overflow: hidden;
+      min-height: 80px;
     }
-    .player-wrapper iframe { width: 100%; height: 100%; border: none; }
+    .player-wrapper iframe { width: 100%; height: 100%; border: none; aspect-ratio: 16/9; }
+    .player-wrapper.audio-mode {
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px; gap: 12px; min-height: 80px; aspect-ratio: unset;
+    }
+    .player-wrapper audio { width: 100%; max-width: 600px; }
     .placeholder {
-      width: 100%; height: 100%;
+      width: 100%; padding: 60px 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       color: #555; gap: 12px;
     }
-    .placeholder-icon { font-size: 4rem; }
+    .placeholder-icon { font-size: 3rem; }
 
-    /* ── Chordify-style 타임라인 ── */
+    /* ── 분석 진행 바 ── */
+    .analysis-progress {
+      width: 100%; max-width: 960px;
+      display: none; margin-bottom: 8px;
+    }
+    .analysis-progress.active { display: block; }
+    .progress-bar {
+      height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, #ff6b35, #f7c948);
+      width: 0%; transition: width 0.3s;
+    }
+    .progress-label {
+      font-size: 0.75rem; color: #888; margin-top: 4px; text-align: center;
+    }
+
+    /* ── 타임라인 ── */
     .chord-timeline-wrapper {
-      width: 100%; max-width: 900px;
-      background: #111118;
-      border: 1px solid #2a2a4a;
-      border-top: none;
-      border-radius: 0 0 12px 12px;
+      width: 100%; max-width: 960px;
+      background: #111118; border: 1px solid #2a2a4a;
+      border-top: none; border-radius: 0 0 12px 12px;
       overflow: hidden;
     }
     .chord-info-bar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 16px;
-      background: #16161e;
-      border-bottom: 1px solid #222;
+      padding: 8px 16px; background: #16161e; border-bottom: 1px solid #222;
     }
-    .chord-now {
-      display: flex; align-items: center; gap: 12px;
-    }
+    .chord-now { display: flex; align-items: center; gap: 12px; }
     .chord-now-label {
       font-size: 2rem; font-weight: 800;
       background: linear-gradient(135deg, #ff6b35, #f7c948);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      min-width: 60px; text-align: center;
-      line-height: 1;
+      min-width: 80px; text-align: center; line-height: 1;
     }
     .chord-now-conf {
       height: 4px; width: 80px; background: #2a2a4a; border-radius: 2px; overflow: hidden;
@@ -132,143 +145,80 @@
     }
     .chord-now-meta { display: flex; flex-direction: column; gap: 2px; }
     .chord-now-meta span { font-size: 0.65rem; color: #666; }
-    .metro-mini {
-      display: flex; flex-direction: column;
-      align-items: center; gap: 4px;
-    }
-    .metro-dots { display: flex; gap: 5px; }
-    .metro-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #2a2a4a; transition: all 0.08s;
-    }
-    .metro-dot.on {
-      background: #f7c948;
-      box-shadow: 0 0 8px rgba(247,201,72,0.6);
-    }
-    .bpm-label { font-size: 0.8rem; font-weight: 700; color: #f7c948; }
+    .bpm-label { font-size: 0.9rem; font-weight: 700; color: #f7c948; }
     .bpm-label small { font-weight: 400; color: #888; }
-    .sync-badge {
-      display: flex; align-items: center; gap: 5px;
-      padding: 3px 8px; border-radius: 14px;
-      background: #1a1a2e; font-size: 0.7rem;
-      color: #888; border: 1px solid #2a2a4a;
-    }
-    .sync-badge.connected { border-color: #4ade80; color: #4ade80; }
-    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #555; }
-    .sync-dot.on { background: #4ade80; }
 
-    /* 타임라인 트랙 */
     .timeline-container {
-      position: relative;
-      height: 80px;
-      overflow: hidden;
-      user-select: none;
+      position: relative; height: 80px; overflow: hidden; user-select: none;
     }
     .timeline-track {
-      display: flex;
-      height: 100%;
-      position: absolute; top: 0; left: 0;
-      transition: transform 0.3s ease-out;
+      display: flex; height: 100%; position: absolute; top: 0; left: 0;
+      transition: transform 0.15s ease-out;
     }
-    /* 플레이헤드: 왼쪽에서 25% 위치 고정 (미래 코드 미리보기) */
     .playhead {
-      position: absolute;
-      top: 0; bottom: 0;
-      left: 25%;
-      width: 3px;
-      background: #ff6b35;
-      z-index: 10;
+      position: absolute; top: 0; bottom: 0; left: 25%;
+      width: 3px; background: #ff6b35; z-index: 10;
       box-shadow: 0 0 8px rgba(255,107,53,0.6);
     }
     .playhead::before {
-      content: ''; position: absolute;
-      top: -4px; left: -5px;
-      border-left: 6px solid transparent;
-      border-right: 6px solid transparent;
+      content: ''; position: absolute; top: -4px; left: -5px;
+      border-left: 6px solid transparent; border-right: 6px solid transparent;
       border-top: 6px solid #ff6b35;
     }
-    /* 비트 그리드 라인 */
-    .beat-grid {
-      position: absolute; top: 0; bottom: 0;
-      width: 1px; background: rgba(255,255,255,0.06);
-      z-index: 1;
-    }
-    .beat-grid.bar { background: rgba(255,255,255,0.12); }
 
-    /* 코드 블록 (1 beat = 1 cell) */
     .chord-block {
-      height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      font-weight: 700;
-      font-size: 1rem;
-      color: #bbb;
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-weight: 700; font-size: 1rem; color: #bbb;
       border-right: 1px solid rgba(255,255,255,0.06);
-      position: relative;
-      transition: background 0.15s;
+      position: relative; transition: background 0.15s;
     }
-    /* 마디 첫 박 (굵은 구분선) */
-    .chord-block.bar-start {
-      border-left: 2px solid rgba(255,255,255,0.18);
-    }
+    .chord-block.bar-start { border-left: 2px solid rgba(255,255,255,0.18); }
     .chord-block .chord-label {
-      z-index: 2; position: relative;
-      padding: 3px 6px; border-radius: 4px;
-      background: rgba(0,0,0,0.25);
-      white-space: nowrap;
+      z-index: 2; position: relative; padding: 3px 6px; border-radius: 4px;
+      background: rgba(0,0,0,0.25); white-space: nowrap;
     }
-    /* 같은 코드 연속 시 첫 번째만 이름 표시, 나머지는 점선 */
-    .chord-block .chord-label.continuation {
-      font-size: 0.7rem; opacity: 0.35; background: none;
-    }
+    .chord-block .chord-label.continuation { font-size: 0.7rem; opacity: 0.35; background: none; }
     .chord-block.past { opacity: 0.45; }
     .chord-block.current { opacity: 1; background: rgba(255,107,53,0.08); }
     .chord-block.current .chord-label {
-      background: rgba(255,107,53,0.3);
-      color: #fff; font-size: 1.15rem;
+      background: rgba(255,107,53,0.3); color: #fff; font-size: 1.15rem;
       box-shadow: 0 0 10px rgba(255,107,53,0.2);
     }
     .chord-block.future { opacity: 0.55; }
     .chord-block.future-empty { opacity: 0.25; }
 
-    /* 코드별 색상 밴드 (상단 4px 색상 바) */
     .chord-block::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0;
-      height: 4px;
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
     }
     .chord-block[data-root="C"]::before { background: #4ade80; }
-    .chord-block[data-root="C#"]::before, .chord-block[data-root="Db"]::before { background: #22d3ee; }
+    .chord-block[data-root="C#"]::before,.chord-block[data-root="Db"]::before { background: #22d3ee; }
     .chord-block[data-root="D"]::before { background: #60a5fa; }
-    .chord-block[data-root="D#"]::before, .chord-block[data-root="Eb"]::before { background: #818cf8; }
+    .chord-block[data-root="D#"]::before,.chord-block[data-root="Eb"]::before { background: #818cf8; }
     .chord-block[data-root="E"]::before { background: #a78bfa; }
     .chord-block[data-root="F"]::before { background: #c084fc; }
-    .chord-block[data-root="F#"]::before, .chord-block[data-root="Gb"]::before { background: #e879f9; }
+    .chord-block[data-root="F#"]::before,.chord-block[data-root="Gb"]::before { background: #e879f9; }
     .chord-block[data-root="G"]::before { background: #f472b6; }
-    .chord-block[data-root="G#"]::before, .chord-block[data-root="Ab"]::before { background: #fb7185; }
+    .chord-block[data-root="G#"]::before,.chord-block[data-root="Ab"]::before { background: #fb7185; }
     .chord-block[data-root="A"]::before { background: #f97316; }
-    .chord-block[data-root="A#"]::before, .chord-block[data-root="Bb"]::before { background: #f59e0b; }
+    .chord-block[data-root="A#"]::before,.chord-block[data-root="Bb"]::before { background: #f59e0b; }
     .chord-block[data-root="B"]::before { background: #84cc16; }
     .chord-block[data-root="-"]::before { background: #333; }
 
-    /* 하단 마디 번호 */
     .bar-numbers {
-      display: flex; height: 18px;
-      background: #0e0e14;
-      border-top: 1px solid #222;
-      font-size: 0.55rem; color: #555;
+      display: flex; height: 18px; background: #0e0e14;
+      border-top: 1px solid #222; font-size: 0.55rem; color: #555;
       overflow: hidden; position: relative;
     }
     .bar-num {
-      flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
       border-right: 1px solid rgba(255,255,255,0.04);
     }
     .bar-num.current { color: #ff6b35; font-weight: 700; }
 
+    /* ── 하단 ── */
     .bottom-panel {
-      width: 100%; max-width: 900px;
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 12px; margin-top: 16px;
+      width: 100%; max-width: 960px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;
     }
     .panel-card {
       background: #1a1a2e; border: 1px solid #2a2a4a;
@@ -286,14 +236,6 @@
       background: linear-gradient(135deg,#ff6b35,#e85d26);
       border-color: #ff6b35; color: #fff; font-weight: 600;
     }
-    .room-input {
-      padding: 7px 8px; border-radius: 6px;
-      border: 1px solid #3a3a5a; background: #111;
-      color: #e1e1e1; font-size: 0.8rem;
-      width: 100px; text-align: center;
-      letter-spacing: 3px; font-weight: 600;
-    }
-    .room-input::placeholder { letter-spacing: 0; font-weight: 400; }
     .status-row {
       display: flex; align-items: center; gap: 5px;
       margin-top: 8px; font-size: 0.7rem; color: #666;
@@ -301,15 +243,9 @@
     .st-dot { width: 6px; height: 6px; border-radius: 50%; background: #555; }
     .st-dot.ok { background: #4ade80; }
     .st-dot.err { background: #f87171; }
-    .users-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
-    .user-chip {
-      padding: 2px 8px; border-radius: 10px;
-      background: #2a2a4a; font-size: 0.65rem;
-    }
-    .user-chip.host { border: 1px solid #f7c948; }
     .log-box {
       background: #111; border-radius: 6px; padding: 8px;
-      max-height: 140px; overflow-y: auto;
+      max-height: 200px; overflow-y: auto;
       font-family: 'SF Mono','Fira Code',monospace;
       font-size: 0.7rem; line-height: 1.5; color: #666;
     }
@@ -321,30 +257,62 @@
 <body>
   <div class="header">
     <h1>SyncChord</h1>
-    <span class="header-sub">YouTube 실시간 코드 인식 + 싱크 합주</span>
+    <span class="header-sub">오프라인 코드 분석 (Chordify 방식) + 실시간 캡처</span>
   </div>
 
-  <div class="url-bar">
-    <input type="text" id="urlInput" placeholder="YouTube URL 붙여넣기 (예: https://www.youtube.com/watch?v=...)">
-    <button class="primary" id="btnLoad">▶ 분석 시작</button>
+  <!-- 입력 탭 -->
+  <div class="input-section">
+    <div class="tab-bar">
+      <div class="tab-btn active" data-tab="file">📁 오디오 파일</div>
+      <div class="tab-btn" data-tab="youtube">▶ YouTube</div>
+      <div class="tab-btn" data-tab="live">🎤 실시간</div>
+    </div>
+    <div class="tab-content active" id="tabFile">
+      <div class="file-drop" id="fileDrop">
+        <div class="icon">🎵</div>
+        <div>MP3, WAV, OGG 파일을 드래그하거나 클릭해서 업로드</div>
+        <div style="font-size:0.75rem;color:#555;margin-top:4px">전체 오디오를 오프라인 분석합니다 (Chordify 방식)</div>
+        <input type="file" id="fileInput" accept="audio/*">
+      </div>
+    </div>
+    <div class="tab-content" id="tabYoutube">
+      <div class="url-bar">
+        <input type="text" id="urlInput" placeholder="YouTube URL 붙여넣기">
+        <button class="primary" id="btnLoad">▶ 로드</button>
+      </div>
+      <div class="presets">
+        <button class="preset-btn" data-id="kl0rqqhCU_s">🎤 김범수 - 보고싶다</button>
+        <button class="preset-btn" data-id="5qap5aO4i9A">🎸 lofi hip hop</button>
+        <button class="preset-btn" data-id="YQHsXMglC9A">🎶 Adele - Hello</button>
+      </div>
+      <div style="font-size:0.7rem;color:#555;margin-top:8px">YouTube: "오디오 캡처" 필요 (실시간 분석)</div>
+    </div>
+    <div class="tab-content" id="tabLive">
+      <div class="ctrl-row">
+        <button class="primary" id="btnSystem">🔊 시스템 오디오 캡처</button>
+        <button id="btnMic">🎤 마이크</button>
+        <button id="btnStop" style="display:none">⏹ 중지</button>
+      </div>
+      <div style="font-size:0.7rem;color:#555;margin-top:8px">실시간 분석 (정확도 낮음 — 오프라인 분석 권장)</div>
+    </div>
   </div>
 
-  <div class="presets">
-    <button class="preset-btn" data-id="kl0rqqhCU_s">🎤 김범수 - 보고싶다</button>
-    <button class="preset-btn" data-id="5qap5aO4i9A">🎸 lofi hip hop</button>
-    <button class="preset-btn" data-id="60ItHLz5WEA">🎵 Alan Walker - Faded</button>
-    <button class="preset-btn" data-id="YQHsXMglC9A">🎶 Adele - Hello</button>
-    <button class="preset-btn" data-id="LDU_Txk06tM">🎹 Jamiroquai</button>
-  </div>
-
+  <!-- 플레이어 -->
   <div class="player-wrapper" id="playerWrapper">
     <div class="placeholder">
       <div class="placeholder-icon">🎸</div>
-      <div>YouTube URL을 입력하거나 프리셋을 클릭하세요</div>
+      <div>오디오 파일을 업로드하거나 YouTube URL을 입력하세요</div>
     </div>
   </div>
+
+  <!-- 분석 진행 바 -->
+  <div class="analysis-progress" id="analysisProgress">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">분석 준비 중...</div>
+  </div>
+
+  <!-- 타임라인 -->
   <div class="chord-timeline-wrapper">
-    <!-- 상단 정보 바: 현재 코드 + BPM + 싱크 -->
     <div class="chord-info-bar">
       <div class="chord-now">
         <div class="chord-now-label" id="chordNowLabel">-</div>
@@ -353,68 +321,29 @@
           <div class="chord-now-conf"><div class="chord-now-conf-fill" id="confFill"></div></div>
         </div>
       </div>
-      <div class="metro-mini">
-        <div class="metro-dots">
-          <div class="metro-dot" id="md1"></div>
-          <div class="metro-dot" id="md2"></div>
-          <div class="metro-dot" id="md3"></div>
-          <div class="metro-dot" id="md4"></div>
-        </div>
-        <div class="bpm-label"><span id="bpmVal">72</span> <small>BPM</small></div>
-      </div>
-      <div class="sync-badge" id="syncBadge">
-        <div class="sync-dot" id="syncDot"></div>
-        <span id="syncLabel">오프라인</span>
-      </div>
+      <div class="bpm-label"><span id="bpmVal">-</span> <small>BPM</small></div>
     </div>
-    <!-- 타임라인 트랙 -->
     <div class="timeline-container" id="timelineContainer">
       <div class="playhead"></div>
       <div class="timeline-track" id="timelineTrack"></div>
     </div>
-    <!-- 마디 번호 -->
     <div class="bar-numbers" id="barNumbers"></div>
   </div>
 
-  <!-- HPCP 시각화 -->
-  <div style="display:flex;gap:3px;align-items:flex-end;height:50px;max-width:900px;width:100%;padding:4px 12px;background:#1a1a2e;border-radius:6px;margin-bottom:8px">
-    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="A"></div>
-    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="Bb"></div>
-    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="B"></div>
-    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="C"></div>
-    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="C#"></div>
-    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="D"></div>
-    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="Eb"></div>
-    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="E"></div>
-    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="F"></div>
-    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="F#"></div>
-    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="G"></div>
-    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="Ab"></div>
-    <div style="display:flex;flex-direction:column;gap:1px;font-size:8px;color:#666;margin-left:4px">
-      <span>HPCP</span><span>36bin</span>
-    </div>
-  </div>
-
+  <!-- 하단 -->
   <div class="bottom-panel">
     <div class="panel-card">
-      <h3>🎛 컨트롤</h3>
+      <h3>🎛 설정</h3>
       <div class="ctrl-row">
-        <button class="primary" id="btnSystem">🔊 오디오 캡처</button>
-        <button id="btnMic">🎤 마이크</button>
-        <button id="btnMetro">▶ 메트로놈</button>
+        <span style="font-size:0.75rem;color:#888">BPM:</span>
         <button id="bpmDn">-5</button>
         <button id="bpmUp">+5</button>
-      </div>
-      <div class="ctrl-row" style="margin-top:8px">
-        <button class="primary" id="btnCreate">방 만들기</button>
-        <input class="room-input" id="roomInput" placeholder="코드" maxlength="6">
-        <button id="btnJoin">참가</button>
+        <button id="bpmAuto">자동</button>
       </div>
       <div class="status-row">
         <div class="st-dot" id="wasmDot"></div>
         <span id="wasmLabel">WASM 대기...</span>
       </div>
-      <div class="users-row" id="usersList"></div>
     </div>
     <div class="panel-card">
       <h3>📋 로그</h3>
@@ -422,7 +351,6 @@
     </div>
   </div>
 
-  <!-- Essentia WASM 로더 (전역 EssentiaWASM 함수 생성) -->
   <script src="./essentia/essentia-wasm.web.js"></script>
 
   <script type="module">
@@ -435,13 +363,14 @@
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // Essentia.js WASM 엔진 v5 — 버그 수정 + BPM 안정화
-    // Windowing → Spectrum → SpectralPeaks → HPCP → Key(edma)
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    // Essentia.js WASM 초기화
+    // ══════════════════════════════════════════════════════
     let essentia = null;
     let essentiaReady = false;
     const FRAME_SIZE = 4096;
+    const HOP_SIZE = 2048;
+    const HPCP_SIZE = 36;
 
     async function loadEssentia() {
       try {
@@ -449,7 +378,7 @@
         const wasmModule = await EssentiaWASM();
         essentia = new Essentia(wasmModule, false);
         essentiaReady = true;
-        window._essentia = essentia; // 디버그용
+        window._essentia = essentia;
         document.getElementById('wasmDot').classList.add('ok');
         document.getElementById('wasmLabel').textContent = `Essentia ${essentia.version} 로드 완료`;
         log(`Essentia.js ${essentia.version} WASM 로드 성공`);
@@ -457,560 +386,592 @@
         document.getElementById('wasmDot').classList.add('err');
         document.getElementById('wasmLabel').textContent = 'Essentia WASM 실패';
         log('Essentia WASM 로드 실패: ' + e.message, 'error');
-        console.error(e);
       }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // Essentia 기본 파이프라인 v7
-    // HPCP 36-bin (기본값) → Key(tonictriad, pcpSize=36)
-    // ★ 이전 버그: 12-bin HPCP를 pcpSize=36 Key에 넣음 → 프로파일 불일치
-    // ══════════════════════════════════════════════════════════════
-    const HPCP_SIZE = 36; // Key 기본 pcpSize=36에 맞춤
-    const HPCP_WINDOW = 6; // ~560ms 평균 (ChordsDetection 기본 2초보다 짧게)
-    let hpcpBuf = [];
-    let stableChord = '-';
-    let stableCount = 0;
-    let frameCount = 0;
+    // ══════════════════════════════════════════════════════
+    // 오프라인 분석 (Chordify 방식: 전체 오디오 → 일괄 분석)
+    // ══════════════════════════════════════════════════════
+    let offlineChords = []; // { time, chord, confidence }
+    let offlineBPM = 72;
+    let offlineBeatTimes = []; // 각 비트의 시간 (초)
 
-    // HPCP 시각화 업데이트
-    function updateHpcpViz(hpcp36){
-      const bars = document.querySelectorAll('.hpcp-bar');
-      if(!bars.length) return;
-      // 36bin → 12 semitone (최대값 추출)
-      for(let i = 0; i < 12; i++){
-        const v = Math.max(hpcp36[i*3], hpcp36[i*3+1], hpcp36[i*3+2]);
-        bars[i].style.height = Math.max(2, v * 40) + 'px';
-        bars[i].style.opacity = 0.3 + v * 0.7;
-      }
-    }
-
-    function essentiaChordDetect(timeDomainData, sampleRate) {
-      if (!essentiaReady || !essentia) return { chord: '-', confidence: 0 };
-
+    // 단일 프레임 HPCP 계산
+    function computeHPCP(frame, sampleRate) {
       const toDelete = [];
       try {
-        const inputVec = essentia.arrayToVector(timeDomainData);
+        const inputVec = essentia.arrayToVector(frame);
         toDelete.push(inputVec);
 
-        // Windowing (hann, Essentia 기본)
         const windowed = essentia.Windowing(inputVec, true, FRAME_SIZE, 'hann', 0, true);
         toDelete.push(windowed.frame);
 
-        // Spectrum
         const spectrum = essentia.Spectrum(windowed.frame, FRAME_SIZE);
         toDelete.push(spectrum.spectrum);
 
-        // SpectralPeaks
         const peaks = essentia.SpectralPeaks(spectrum.spectrum,
           0.00001, 5000, 60, 40, 'magnitude', sampleRate);
         toDelete.push(peaks.frequencies, peaks.magnitudes);
 
-        // ★ HPCP 36-bin (Essentia Key 기본값에 맞춤, A=bin0)
         const hpcp = essentia.HPCP(peaks.frequencies, peaks.magnitudes,
-          true,     // bandPreset
-          500,      // bandSplitFrequency
-          0,        // harmonics (기본값 0)
-          5000,     // maxFrequency
-          false,    // maxShifted
-          40,       // minFrequency
-          false,    // nonLinear
-          'unitMax',// normalized
-          440,      // referenceFrequency
-          sampleRate,
-          HPCP_SIZE,// ★ size=36 (Key 기본값과 일치)
-          'squaredCosine',
-          1);
+          true, 500, 0, 5000, false, 40, false, 'unitMax', 440, sampleRate,
+          HPCP_SIZE, 'squaredCosine', 1);
         toDelete.push(hpcp.hpcp);
 
-        const hpcpArr = essentia.vectorToArray(hpcp.hpcp);
+        return essentia.vectorToArray(hpcp.hpcp);
+      } finally {
+        for (const v of toDelete) { try { v.delete(); } catch(_){} }
+      }
+    }
 
-        // HPCP 시각화
-        updateHpcpViz(hpcpArr);
-
-        // 프레임 버퍼 평균
-        hpcpBuf.push(Array.from(hpcpArr));
-        if(hpcpBuf.length > HPCP_WINDOW) hpcpBuf.shift();
-
+    // HPCP 윈도우 평균 → Key 알고리즘
+    function detectChordFromHPCPs(hpcpFrames) {
+      const toDelete = [];
+      try {
         const avg = new Float32Array(HPCP_SIZE);
-        for(const f of hpcpBuf) for(let i=0;i<HPCP_SIZE;i++) avg[i] += f[i];
-        for(let i=0;i<HPCP_SIZE;i++) avg[i] /= hpcpBuf.length;
+        for (const f of hpcpFrames) {
+          for (let i = 0; i < HPCP_SIZE; i++) avg[i] += f[i];
+        }
+        for (let i = 0; i < HPCP_SIZE; i++) avg[i] /= hpcpFrames.length;
 
-        // ★ Key 알고리즘 — Essentia 기본 설정
-        // pcpSize=36, profileType='tonictriad' (ChordsDetection과 동일)
         const avgVec = essentia.arrayToVector(avg);
         toDelete.push(avgVec);
 
-        const keyResult = essentia.Key(avgVec,
-          4,             // numHarmonics
-          HPCP_SIZE,     // ★ pcpSize=36 (기본값!)
-          'tonictriad',  // profileType (ChordsDetection 기본)
-          0.6,           // slope
-          false,         // useMajMin
-          false,         // usePolyphony
-          false          // useThreeChords
-        );
-
-        const chordName = keyResult.scale === 'minor'
-          ? keyResult.key + 'm' : keyResult.key;
-        const confidence = Math.max(0, Math.min(1, keyResult.strength));
-
-        // 디버그 로그 (20프레임마다)
-        frameCount++;
-        if(frameCount % 15 === 0){
-          const binNames = ['A','Bb','B','C','C#','D','Eb','E','F','F#','G','Ab'];
-          // 36→12 요약
-          const s12 = new Float32Array(12);
-          for(let i=0;i<36;i++) s12[Math.floor(i/3)] = Math.max(s12[Math.floor(i/3)], avg[i]);
-          const top3 = [...s12].map((v,i)=>({n:binNames[i],v}))
-            .sort((a,b)=>b.v-a.v).slice(0,3)
-            .map(x=>`${x.n}:${x.v.toFixed(2)}`).join(' ');
-          log(`HPCP [${top3}] → ${chordName} (${(confidence*100).toFixed(0)}%)`);
-        }
-
-        // 히스테리시스: 2회 연속 다르면 전환
-        if(chordName !== stableChord){
-          stableCount++;
-          if(stableCount < 2 && stableChord !== '-'){
-            return { chord: stableChord, confidence: confidence * 0.85 };
-          }
-          stableChord = chordName;
-          stableCount = 0;
-        } else {
-          stableCount = 0;
-        }
-
-        return { chord: chordName, confidence };
-      } catch(e) {
-        console.error('Essentia error:', e);
-        return { chord: '-', confidence: 0 };
+        const result = essentia.Key(avgVec, 4, HPCP_SIZE, 'tonictriad', 0.6, false, false, false);
+        const chord = result.scale === 'minor' ? result.key + 'm' : result.key;
+        return { chord, confidence: result.strength };
       } finally {
-        for(const v of toDelete){ try{v.delete();}catch(_){} }
+        for (const v of toDelete) { try { v.delete(); } catch(_){} }
       }
     }
 
-    // ── BPM 감지 (개선: 자기상관 기반 + 배수/약수 보정) ──
-    let bpm = 72;
-    let bpmLocked = false;
-    let energyHistory = [];
-    let onsetTimes = [];
+    // BPM 감지: Essentia의 PercivalBpmEstimator 또는 onset 기반
+    function detectBPM(audioData, sampleRate) {
+      const toDelete = [];
+      try {
+        // RhythmExtractor2013 사용 시도
+        const inputVec = essentia.arrayToVector(audioData);
+        toDelete.push(inputVec);
 
-    function detectBPMFromOnsets(){
-      if(onsetTimes.length < 8) return;
+        try {
+          const rhythm = essentia.PercivalBpmEstimator(inputVec,
+            FRAME_SIZE, HOP_SIZE, 210, 50, sampleRate);
+          if (rhythm.bpm > 30 && rhythm.bpm < 250) {
+            return Math.round(rhythm.bpm);
+          }
+        } catch(e) {
+          console.log('PercivalBpmEstimator not available, using onset method');
+        }
 
-      // 모든 IOI (Inter-Onset Interval) 수집
-      const intervals = [];
-      for(let i = 1; i < onsetTimes.length; i++){
-        const dt = onsetTimes[i] - onsetTimes[i-1];
-        if(dt > 200 && dt < 2000) intervals.push(dt);
+        // 폴백: onset energy 기반
+        return estimateBPMFromOnsets(audioData, sampleRate);
+      } finally {
+        for (const v of toDelete) { try { v.delete(); } catch(_){} }
       }
-      if(intervals.length < 4) return;
+    }
 
-      // IOI 히스토그램 (30ms 버킷)
+    function estimateBPMFromOnsets(audioData, sampleRate) {
+      // 간단한 에너지 기반 onset 감지
+      const frameLen = 1024;
+      const energies = [];
+      for (let i = 0; i < audioData.length - frameLen; i += frameLen) {
+        let e = 0;
+        for (let j = 0; j < frameLen; j++) e += audioData[i + j] ** 2;
+        energies.push(Math.sqrt(e / frameLen));
+      }
+
+      // onset 감지
+      const onsets = [];
+      const windowSize = 10;
+      for (let i = windowSize; i < energies.length - 1; i++) {
+        const localAvg = energies.slice(i - windowSize, i).reduce((a, b) => a + b) / windowSize;
+        if (energies[i] > localAvg * 1.5 && energies[i] > energies[i - 1]) {
+          const timeSec = (i * frameLen) / sampleRate;
+          if (onsets.length === 0 || timeSec - onsets[onsets.length - 1] > 0.15) {
+            onsets.push(timeSec);
+          }
+        }
+      }
+
+      if (onsets.length < 4) return 72;
+
+      // IOI 히스토그램
+      const iois = [];
+      for (let i = 1; i < onsets.length; i++) {
+        const dt = onsets[i] - onsets[i - 1];
+        if (dt > 0.2 && dt < 2.0) iois.push(dt);
+      }
+
       const hist = {};
-      for(const dt of intervals){
-        const bucket = Math.round(dt / 30) * 30;
+      for (const dt of iois) {
+        const bucket = Math.round(dt * 20) / 20; // 50ms 버킷
         hist[bucket] = (hist[bucket] || 0) + 1;
       }
 
-      // 상위 후보 BPM 추출
-      const candidates = [];
-      const sorted = Object.entries(hist).sort((a,b) => b[1] - a[1]);
-      for(const [bucket, count] of sorted.slice(0, 5)){
-        const ms = Number(bucket);
-        if(ms < 200) continue;
-        let rawBPM = 60000 / ms;
+      const sorted = Object.entries(hist).sort((a, b) => b[1] - a[1]);
+      if (sorted.length === 0) return 72;
 
-        // 50-160 BPM 범위로 정규화 (배수/약수 관계 보정)
-        while(rawBPM < 50) rawBPM *= 2;
-        while(rawBPM > 160) rawBPM /= 2;
+      let bpm = Math.round(60 / Number(sorted[0][0]));
+      while (bpm < 50) bpm *= 2;
+      while (bpm > 160) bpm /= 2;
+      return Math.round(bpm);
+    }
 
-        candidates.push({ bpm: Math.round(rawBPM), count, ms });
+    // ★ 메인 오프라인 분석 함수
+    async function analyzeOffline(audioBuffer) {
+      if (!essentiaReady) {
+        log('Essentia WASM 아직 로딩 중...', 'warn');
+        return;
       }
-      if(candidates.length === 0) return;
 
-      // 가장 빈도 높은 후보 선택
-      candidates.sort((a,b) => b.count - a.count);
-      const bestCandidate = candidates[0].bpm;
+      const sampleRate = audioBuffer.sampleRate;
+      // 모노로 변환
+      let audioData;
+      if (audioBuffer.numberOfChannels > 1) {
+        audioData = new Float32Array(audioBuffer.length);
+        const ch0 = audioBuffer.getChannelData(0);
+        const ch1 = audioBuffer.getChannelData(1);
+        for (let i = 0; i < audioBuffer.length; i++) {
+          audioData[i] = (ch0[i] + ch1[i]) / 2;
+        }
+      } else {
+        audioData = audioBuffer.getChannelData(0);
+      }
 
-      // 현재 BPM과 비교: 배수 관계인 경우 낮은 쪽 선호 (발라드 보호)
-      if(!bpmLocked){
-        let newBpm = bestCandidate;
+      const duration = audioBuffer.duration;
+      log(`오디오: ${duration.toFixed(1)}초, ${sampleRate}Hz, ${audioBuffer.numberOfChannels}ch`);
 
-        // 현재 BPM의 ~2배면 → 현재 유지 (더블타임 방지)
-        if(Math.abs(newBpm / bpm - 2) < 0.15) newBpm = bpm;
-        // 현재 BPM의 ~0.5배면 → 현재 유지
-        if(Math.abs(newBpm / bpm - 0.5) < 0.15) newBpm = bpm;
+      // 1단계: BPM 감지
+      showProgress(5, 'BPM 감지 중...');
+      log('BPM 감지 중...');
 
-        // 부드럽게 전환 (급변 방지)
-        const smoothed = Math.round(bpm * 0.7 + newBpm * 0.3);
-        if(Math.abs(smoothed - bpm) >= 2){
-          bpm = smoothed;
-          document.getElementById('bpmVal').textContent = bpm;
-          log(`BPM: ${bpm}`, 'info');
+      // 처음 30초로 BPM 추정 (전체는 너무 오래 걸림)
+      const bpmSamples = audioData.slice(0, Math.min(audioData.length, sampleRate * 30));
+      offlineBPM = detectBPM(bpmSamples, sampleRate);
+      document.getElementById('bpmVal').textContent = offlineBPM;
+      log(`BPM 감지: ${offlineBPM}`);
+
+      // 2단계: 전체 HPCP 계산
+      showProgress(10, 'HPCP 계산 중...');
+      log('전체 HPCP 계산 중...');
+
+      const totalFrames = Math.floor((audioData.length - FRAME_SIZE) / HOP_SIZE);
+      const allHPCPs = [];
+
+      for (let i = 0; i < totalFrames; i++) {
+        const start = i * HOP_SIZE;
+        const frame = audioData.slice(start, start + FRAME_SIZE);
+        if (frame.length < FRAME_SIZE) break;
+
+        try {
+          const hpcp = computeHPCP(frame, sampleRate);
+          allHPCPs.push({ time: start / sampleRate, hpcp: Array.from(hpcp) });
+        } catch(e) {
+          // 스킵
+        }
+
+        // 진행률 업데이트 (10~80%)
+        if (i % 50 === 0) {
+          const pct = 10 + (i / totalFrames) * 70;
+          showProgress(pct, `HPCP 계산: ${i}/${totalFrames} (${(pct).toFixed(0)}%)`);
+          await new Promise(r => setTimeout(r, 0)); // UI 업데이트 허용
         }
       }
-    }
 
-    // ── Onset 감지 (개선: 스펙트럼 변화량 기반) ──
-    let prevSpectrum = null;
-    let lastOnsetTime = 0;
-    function detectOnset(fftDB){
-      // 스펙트럼 에너지
-      let energy = 0;
-      for(let i = 0; i < fftDB.length; i++){
-        if(fftDB[i] > -80) energy += Math.pow(10, fftDB[i] / 20);
+      log(`HPCP 프레임: ${allHPCPs.length}개`);
+
+      // 3단계: 비트 그리드 생성
+      showProgress(82, '비트 그리드 생성...');
+      const beatInterval = 60 / offlineBPM;
+      offlineBeatTimes = [];
+      for (let t = 0; t < duration; t += beatInterval) {
+        offlineBeatTimes.push(t);
       }
-      energyHistory.push(energy);
-      if(energyHistory.length > 100) energyHistory.shift();
-      if(energyHistory.length < 10) return false;
 
-      const avg = energyHistory.reduce((a,b) => a + b, 0) / energyHistory.length;
-      const stdDev = Math.sqrt(energyHistory.reduce((a,b) => a + (b-avg)**2, 0) / energyHistory.length);
-      const threshold = avg + stdDev * 1.5;
-      const isOnset = energy > threshold;
+      // 4단계: 비트별 코드 감지 (ChordsDetection 방식: 비트 주변 ~1초 HPCP 평균)
+      showProgress(85, '코드 감지 중...');
+      log('비트별 코드 감지 중...');
+      offlineChords = [];
 
-      if(isOnset){
-        const now = performance.now();
-        if(now - lastOnsetTime > 200){ // 최소 200ms 간격 (300 BPM 상한)
-          onsetTimes.push(now);
-          lastOnsetTime = now;
-          while(onsetTimes.length > 0 && now - onsetTimes[0] > 20000) onsetTimes.shift();
-          if(onsetTimes.length % 4 === 0) detectBPMFromOnsets();
+      const chordWindowSec = 1.0; // ChordsDetection 윈도우 (초)
+
+      for (let bi = 0; bi < offlineBeatTimes.length; bi++) {
+        const beatTime = offlineBeatTimes[bi];
+        const windowStart = beatTime - chordWindowSec / 2;
+        const windowEnd = beatTime + chordWindowSec / 2;
+
+        // 이 윈도우에 해당하는 HPCP 프레임 수집
+        const windowFrames = allHPCPs.filter(h =>
+          h.time >= windowStart && h.time < windowEnd
+        ).map(h => h.hpcp);
+
+        if (windowFrames.length >= 2) {
+          try {
+            const result = detectChordFromHPCPs(windowFrames);
+            offlineChords.push({
+              time: beatTime,
+              chord: result.chord,
+              confidence: result.confidence
+            });
+          } catch(e) {
+            offlineChords.push({ time: beatTime, chord: '-', confidence: 0 });
+          }
+        } else {
+          offlineChords.push({ time: beatTime, chord: '-', confidence: 0 });
+        }
+
+        if (bi % 20 === 0) {
+          const pct = 85 + (bi / offlineBeatTimes.length) * 14;
+          showProgress(pct, `코드 감지: ${bi}/${offlineBeatTimes.length}`);
+          await new Promise(r => setTimeout(r, 0));
         }
       }
-      return isOnset;
+
+      showProgress(100, '분석 완료!');
+      log(`분석 완료: ${offlineChords.length}개 비트, ${offlineBPM} BPM`);
+
+      // 결과 로그 (처음 16비트)
+      const preview = offlineChords.slice(0, 16).map(c => c.chord).join(' | ');
+      log(`처음 4마디: ${preview}`);
+
+      // 타임라인 빌드 및 재생 준비
+      buildOfflineTimeline();
     }
 
-    // ── 비트 타이머 ──
-    let lastBeatTime = 0;
-    let beatPhaseOffset = 0;
-
-    function snapBeatToOnset(onsetTime){
-      const beatMs = 60000 / bpm;
-      const elapsed = onsetTime - lastBeatTime;
-      const beatFraction = (elapsed % beatMs) / beatMs;
-      if(beatFraction < 0.12 || beatFraction > 0.88){
-        beatPhaseOffset = beatFraction < 0.5
-          ? -beatFraction * beatMs * 0.2
-          : (1 - beatFraction) * beatMs * 0.2;
-      }
+    function showProgress(pct, label) {
+      const el = document.getElementById('analysisProgress');
+      el.classList.add('active');
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent = label;
+      if (pct >= 100) setTimeout(() => el.classList.remove('active'), 2000);
     }
 
-    // ── Chordify 스타일 타임라인 ──
-    let beatTimeline = [];
-    let voteBuffer = [];
-    let currentDisplayChord = '-';
-    let currentBeatInBar = 0;
-    let liveChord = '-';
-    let liveConf = 0;
+    // ══════════════════════════════════════════════════════
+    // 오프라인 타임라인 + 재생 싱크
+    // ══════════════════════════════════════════════════════
+    let currentBeatIdx = 0;
+    let audioElement = null;
+    let playbackRAF = null;
+
+    function buildOfflineTimeline() {
+      // 초기 렌더
+      renderOfflineTimeline(0);
+    }
+
+    function chordRoot(name) {
+      if (!name || name === '-' || name === 'N/C') return '-';
+      const m = name.match(/^([A-G][b#]?)/);
+      return m ? m[1] : '-';
+    }
 
     const BEAT_W = 56;
     const PLAYHEAD_PCT = 0.25;
     const BEATS_PER_BAR = 4;
 
-    function chordRoot(name){
-      if(!name || name === '-' || name === 'N/C') return '-';
-      // C#m7 → C#, Ebdim → Eb, Bbm → Bb, etc.
-      const m = name.match(/^([A-G][b#]?)/);
-      return m ? m[1] : '-';
-    }
-
-    function commitBeat(){
-      let chord = '-', conf = 0;
-      if(voteBuffer.length > 0){
-        const counts = {};
-        let bestChord = voteBuffer[0].chord, bestCount = 0, bestConf = 0;
-        for(const v of voteBuffer){
-          counts[v.chord] = (counts[v.chord] || 0) + 1;
-          if(counts[v.chord] > bestCount || (counts[v.chord] === bestCount && v.confidence > bestConf)){
-            bestCount = counts[v.chord];
-            bestChord = v.chord;
-            bestConf = v.confidence;
-          }
-        }
-        chord = bestChord;
-        conf = bestConf;
-
-        // 이전 박과 같은 코드가 충분히 나왔으면 유지
-        const prevBeat = beatTimeline.length > 0 ? beatTimeline[beatTimeline.length-1] : null;
-        if(prevBeat && prevBeat.chord !== '-'){
-          const prevCount = counts[prevBeat.chord] || 0;
-          if(prevCount > 0 && bestCount - prevCount <= 1){
-            chord = prevBeat.chord;
-            conf = Math.max(conf, prevBeat.conf * 0.85);
-          }
-        }
-      }
-      beatTimeline.push({ chord, conf });
-      currentDisplayChord = chord;
-      currentBeatInBar = (beatTimeline.length - 1) % BEATS_PER_BAR;
-      voteBuffer = [];
-      renderTimeline(conf);
-    }
-
-    function renderTimeline(conf){
+    function renderOfflineTimeline(currentTime) {
       const track = document.getElementById('timelineTrack');
       const container = document.getElementById('timelineContainer');
       const barRow = document.getElementById('barNumbers');
       const containerW = container.clientWidth;
-      const totalBeats = beatTimeline.length;
 
-      const futureBeats = Math.ceil(containerW * (1 - PLAYHEAD_PCT) / BEAT_W) + 4;
-      const allBeats = totalBeats + futureBeats;
+      // 현재 비트 인덱스 찾기
+      let beatIdx = 0;
+      for (let i = 0; i < offlineChords.length; i++) {
+        if (offlineChords[i].time <= currentTime) beatIdx = i;
+        else break;
+      }
+      currentBeatIdx = beatIdx;
+
+      const totalBeats = offlineChords.length;
+      if (totalBeats === 0) return;
+
+      // 가시 범위 계산
+      const visibleBeats = Math.ceil(containerW / BEAT_W) + 8;
+      const startBeat = Math.max(0, beatIdx - Math.ceil(visibleBeats * PLAYHEAD_PCT));
+      const endBeat = Math.min(totalBeats, startBeat + visibleBeats);
 
       let html = '';
-      for(let i = 0; i < allBeats; i++){
-        const isPast = i < totalBeats - 1;
-        const isCurrent = i === totalBeats - 1;
-        const isFuture = i >= totalBeats;
+      for (let i = startBeat; i < endBeat; i++) {
+        const c = offlineChords[i];
         const beatInBar = i % BEATS_PER_BAR;
         const isBarStart = beatInBar === 0;
+        const isCurrent = i === beatIdx;
+        const isPast = i < beatIdx;
 
-        let cls = isCurrent ? 'current' : isPast ? 'past' : 'future-empty';
-        if(isBarStart) cls += ' bar-start';
+        let cls = isCurrent ? 'current' : isPast ? 'past' : 'future';
+        if (isBarStart) cls += ' bar-start';
 
-        if(isFuture){
-          const isNext = i === totalBeats;
-          if(isNext && liveChord !== '-'){
-            const root = chordRoot(liveChord);
-            html += `<div class="chord-block future" data-root="${root}" style="width:${BEAT_W}px">
-              <span class="chord-label">${liveChord}</span>
-            </div>`;
-          } else {
-            html += `<div class="chord-block ${cls}" data-root="-" style="width:${BEAT_W}px">
-              <span class="chord-label continuation">·</span>
-            </div>`;
-          }
-        } else {
-          const b = beatTimeline[i];
-          const root = chordRoot(b.chord);
-          const prevChord = i > 0 ? beatTimeline[i-1].chord : null;
-          const isContinuation = !isBarStart && b.chord === prevChord && !isCurrent;
-          const label = isContinuation
-            ? `<span class="chord-label continuation">─</span>`
-            : `<span class="chord-label">${b.chord}</span>`;
-          html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">
-            ${label}
-          </div>`;
-        }
+        const root = chordRoot(c.chord);
+        const prevChord = i > startBeat ? offlineChords[i - 1]?.chord : null;
+        const isContinuation = !isBarStart && c.chord === prevChord && !isCurrent;
+        const label = isContinuation
+          ? `<span class="chord-label continuation">─</span>`
+          : `<span class="chord-label">${c.chord}</span>`;
+
+        html += `<div class="chord-block ${cls}" data-root="${root}" style="width:${BEAT_W}px">${label}</div>`;
       }
       track.innerHTML = html;
 
+      // 스크롤 위치
       const playheadX = containerW * PLAYHEAD_PCT;
-      const currentCenter = (totalBeats - 0.5) * BEAT_W;
-      const offset = currentCenter - playheadX;
-      track.style.transform = `translateX(${-offset}px)`;
+      const beatOffset = beatIdx - startBeat;
+      const currentCenter = (beatOffset + 0.5) * BEAT_W;
+      track.style.transform = `translateX(${playheadX - currentCenter}px)`;
 
+      // 마디 번호
       let barHtml = '';
-      for(let i = 0; i < allBeats; i++){
+      for (let i = startBeat; i < endBeat; i++) {
         const beatInBar = i % BEATS_PER_BAR;
         const barNum = Math.floor(i / BEATS_PER_BAR) + 1;
-        const isCurr = i === totalBeats - 1;
+        const isCurr = i === beatIdx;
         const txt = beatInBar === 0 ? `<b>${barNum}</b>` : `${beatInBar + 1}`;
         barHtml += `<div class="bar-num ${isCurr ? 'current' : ''}" style="width:${BEAT_W}px">${txt}</div>`;
       }
       barRow.innerHTML = barHtml;
-      barRow.style.position = 'relative';
-      barRow.style.transform = `translateX(${-offset}px)`;
-      barRow.style.width = `${allBeats * BEAT_W}px`;
+      barRow.style.transform = `translateX(${playheadX - currentCenter}px)`;
+      barRow.style.width = `${(endBeat - startBeat) * BEAT_W}px`;
 
-      const displayChord = liveChord !== '-' ? liveChord : currentDisplayChord;
-      document.getElementById('chordNowLabel').textContent = displayChord;
-      const type = displayChord.endsWith('m') ? 'minor' :
-                   displayChord === '-' || displayChord === 'N/C' ? '' : 'major';
-      document.getElementById('chordNowType').textContent =
-        type ? `${type}  |  마디 ${Math.floor((totalBeats-1)/4)+1}  박 ${currentBeatInBar+1}  |  ${bpm} BPM`
-             : `마디 ${Math.floor(Math.max(0,totalBeats-1)/4)+1}  |  ${bpm} BPM`;
-      document.getElementById('confFill').style.width = `${(conf * 100).toFixed(0)}%`;
-
-      for(let i = 1; i <= 4; i++){
-        document.getElementById('md'+i).classList.toggle('on', i === currentBeatInBar + 1);
+      // 현재 코드 표시
+      const currentChord = offlineChords[beatIdx];
+      if (currentChord) {
+        document.getElementById('chordNowLabel').textContent = currentChord.chord;
+        const conf = currentChord.confidence;
+        document.getElementById('confFill').style.width = (conf * 100).toFixed(0) + '%';
+        const beatInBar = beatIdx % BEATS_PER_BAR;
+        const barNum = Math.floor(beatIdx / BEATS_PER_BAR) + 1;
+        const type = currentChord.chord.endsWith('m') ? 'minor' :
+                     currentChord.chord === '-' ? '' : 'major';
+        document.getElementById('chordNowType').textContent =
+          type ? `${type}  |  마디 ${barNum}  박 ${beatInBar + 1}  |  ${offlineBPM} BPM`
+               : `마디 ${barNum}  |  ${offlineBPM} BPM`;
       }
     }
 
-    // ── 분석 루프 (~93ms = 4096/44100, 새 오디오 프레임마다 1회) ──
+    // 재생 싱크 루프
+    function playbackSync() {
+      if (!audioElement || audioElement.paused) {
+        playbackRAF = requestAnimationFrame(playbackSync);
+        return;
+      }
+      renderOfflineTimeline(audioElement.currentTime);
+      playbackRAF = requestAnimationFrame(playbackSync);
+    }
+
+    // ══════════════════════════════════════════════════════
+    // 파일 업로드 처리
+    // ══════════════════════════════════════════════════════
+    function handleFile(file) {
+      if (!file || !file.type.startsWith('audio/')) {
+        log('오디오 파일만 업로드 가능합니다', 'error');
+        return;
+      }
+      log(`파일 로드: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+
+      const wrapper = document.getElementById('playerWrapper');
+      wrapper.className = 'player-wrapper audio-mode';
+
+      // 오디오 엘리먼트 생성
+      const url = URL.createObjectURL(file);
+      wrapper.innerHTML = `<div style="text-align:center">
+        <div style="font-size:1.2rem;font-weight:600;margin-bottom:8px">🎵 ${file.name}</div>
+        <audio controls id="audioPlayer" style="width:100%;max-width:600px"></audio>
+      </div>`;
+      audioElement = document.getElementById('audioPlayer');
+      audioElement.src = url;
+
+      // AudioContext로 디코딩
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const actx = new AudioContext();
+          const buffer = await actx.decodeAudioData(e.target.result);
+          actx.close();
+          log('오디오 디코딩 완료, 분석 시작...');
+          await analyzeOffline(buffer);
+
+          // 재생 싱크 시작
+          if (playbackRAF) cancelAnimationFrame(playbackRAF);
+          playbackSync();
+        } catch(err) {
+          log('오디오 디코딩 실패: ' + err.message, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // ══════════════════════════════════════════════════════
+    // 실시간 분석 (기존 기능)
+    // ══════════════════════════════════════════════════════
     let audioCtx, analyser, isAnalyzing = false;
-    const ANALYSIS_INTERVAL = 93; // 4096 samples / 44100 Hz ≈ 93ms
+    let captureStream = null;
+    let hpcpBuf = [], stableChord = '-', stableCount = 0;
+    let liveChord = '-', liveConf = 0;
+    let beatTimeline = [], voteBuffer = [];
+    let lastBeatTime = 0, liveBPM = 72;
+    let energyHistory = [], onsetTimes = [], lastOnsetTime = 0;
 
-    function doAnalysis(){
-      if(!isAnalyzing) return;
+    function essentiaChordDetectLive(timeDomainData, sampleRate) {
+      if (!essentiaReady) return { chord: '-', confidence: 0 };
+      const toDelete = [];
+      try {
+        const hpcp = computeHPCP(timeDomainData, sampleRate);
+        hpcpBuf.push(Array.from(hpcp));
+        if (hpcpBuf.length > 6) hpcpBuf.shift();
 
-      const fftDB = new Float32Array(analyser.frequencyBinCount);
-      analyser.getFloatFrequencyData(fftDB);
+        const avg = new Float32Array(HPCP_SIZE);
+        for (const f of hpcpBuf) for (let i = 0; i < HPCP_SIZE; i++) avg[i] += f[i];
+        for (let i = 0; i < HPCP_SIZE; i++) avg[i] /= hpcpBuf.length;
 
-      // Onset → BPM
-      const isOnset = detectOnset(fftDB);
-      if(isOnset) snapBeatToOnset(performance.now());
+        const avgVec = essentia.arrayToVector(avg);
+        toDelete.push(avgVec);
+        const result = essentia.Key(avgVec, 4, HPCP_SIZE, 'tonictriad', 0.6, false, false, false);
+        const chord = result.scale === 'minor' ? result.key + 'm' : result.key;
+        const conf = Math.max(0, Math.min(1, result.strength));
 
-      // Essentia 코드 인식
-      const timeDomain = new Float32Array(analyser.fftSize);
-      analyser.getFloatTimeDomainData(timeDomain);
+        if (chord !== stableChord) { stableCount++; if (stableCount < 2 && stableChord !== '-') return { chord: stableChord, confidence: conf * 0.85 }; stableChord = chord; stableCount = 0; }
+        else stableCount = 0;
+        return { chord, confidence: conf };
+      } catch(e) { return { chord: '-', confidence: 0 }; }
+      finally { for (const v of toDelete) { try { v.delete(); } catch(_){} } }
+    }
 
-      // 무음 체크 (RMS < threshold → 스킵)
-      let rms = 0;
-      for(let i = 0; i < timeDomain.length; i++) rms += timeDomain[i] * timeDomain[i];
-      rms = Math.sqrt(rms / timeDomain.length);
-
-      if(rms > 0.005) { // 무음이 아닐 때만 분석
-        const res = essentiaChordDetect(timeDomain, audioCtx.sampleRate);
-        if(res.confidence > 0.25){
-          voteBuffer.push(res);
-          liveChord = res.chord;
-          liveConf = res.confidence;
+    function doLiveAnalysis() {
+      if (!isAnalyzing) return;
+      const td = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(td);
+      let rms = 0; for (let i = 0; i < td.length; i++) rms += td[i]*td[i];
+      rms = Math.sqrt(rms/td.length);
+      if (rms > 0.005) {
+        const res = essentiaChordDetectLive(td, audioCtx.sampleRate);
+        if (res.confidence > 0.25) {
+          voteBuffer.push(res); liveChord = res.chord; liveConf = res.confidence;
           document.getElementById('chordNowLabel').textContent = liveChord;
-          document.getElementById('confFill').style.width = `${(liveConf * 100).toFixed(0)}%`;
+          document.getElementById('confFill').style.width = (liveConf*100).toFixed(0)+'%';
         }
       }
-
-      // 비트 타이머
       const now = performance.now();
-      const beatMs = 60000 / bpm;
-      const adjusted = beatMs + beatPhaseOffset;
-      if(now - lastBeatTime >= adjusted){
-        commitBeat();
+      if (now - lastBeatTime >= 60000/liveBPM) {
+        // commit beat
+        if (voteBuffer.length > 0) {
+          const counts = {};
+          let best = voteBuffer[0].chord, bc = 0;
+          for (const v of voteBuffer) { counts[v.chord]=(counts[v.chord]||0)+1; if(counts[v.chord]>bc){bc=counts[v.chord];best=v.chord;} }
+          beatTimeline.push({ chord: best, conf: voteBuffer[0].confidence });
+        } else { beatTimeline.push({ chord: '-', conf: 0 }); }
+        voteBuffer = [];
         lastBeatTime = now;
-        beatPhaseOffset *= 0.5;
       }
-
-      setTimeout(()=>requestAnimationFrame(doAnalysis), ANALYSIS_INTERVAL);
+      setTimeout(() => requestAnimationFrame(doLiveAnalysis), 93);
     }
 
-    function extractId(url){const m=url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
-
-    let captureStream = null;
-
-    function resetState(){
-      beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
-      prevSpectrum = null; beatPhaseOffset = 0; liveChord = '-';
-      hpcpBuf = []; stableChord = '-'; stableCount = 0; frameCount = 0;
-      document.querySelectorAll('.hpcp-bar').forEach(b => b.style.height = '2px');
-    }
-
-    async function startSystemAudio(){
-      if(isAnalyzing) return;
-      if(!essentiaReady){ log('Essentia WASM 아직 로딩 중...', 'warn'); return; }
-      try{
-        captureStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true, audio: true
-        });
-        audioCtx = new AudioContext();
-        const src = audioCtx.createMediaStreamSource(captureStream);
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = FRAME_SIZE;
-        analyser.smoothingTimeConstant = 0.0;
-        src.connect(analyser);
-        captureStream.getVideoTracks().forEach(t=>t.stop());
-        isAnalyzing = true;
-        lastBeatTime = performance.now();
-        resetState();
-        document.getElementById('btnSystem').textContent='⏹ 캡처 중지';
-        log(`오디오 캡처 — Essentia WASM (edma profile, ${FRAME_SIZE}pt FFT)`);
-        doAnalysis();
-        captureStream.getAudioTracks()[0].onended = ()=>{
-          stopAnalysis(); log('오디오 캡처 종료','warn');
-        };
-      }catch(e){
-        log('오디오 캡처 실패: '+e.message,'error');
-      }
-    }
-
-    async function startMic(){
-      if(isAnalyzing) return;
-      if(!essentiaReady){ log('Essentia WASM 아직 로딩 중...', 'warn'); return; }
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    async function startCapture(type) {
+      if (isAnalyzing) return;
+      if (!essentiaReady) { log('Essentia 로딩 중...', 'warn'); return; }
+      try {
+        const stream = type === 'system'
+          ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+          : await navigator.mediaDevices.getUserMedia({ audio: true });
         audioCtx = new AudioContext();
         const src = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = FRAME_SIZE;
-        analyser.smoothingTimeConstant = 0.0;
+        analyser.smoothingTimeConstant = 0;
         src.connect(analyser);
+        if (type === 'system') stream.getVideoTracks().forEach(t => t.stop());
+        captureStream = stream;
         isAnalyzing = true;
         lastBeatTime = performance.now();
-        resetState();
-        document.getElementById('btnMic').textContent='⏹ 중지';
-        log(`마이크 캡처 — Essentia WASM`);
-        doAnalysis();
-      }catch(e){log('마이크 실패: '+e.message,'error');}
+        hpcpBuf = []; stableChord = '-'; stableCount = 0; beatTimeline = []; voteBuffer = [];
+        document.getElementById('btnStop').style.display = '';
+        log(`${type === 'system' ? '시스템 오디오' : '마이크'} 캡처 시작`);
+        doLiveAnalysis();
+      } catch(e) { log('캡처 실패: ' + e.message, 'error'); }
     }
 
-    function stopAnalysis(){
+    function stopCapture() {
       isAnalyzing = false;
-      if(captureStream){captureStream.getTracks().forEach(t=>t.stop());captureStream=null;}
-      document.getElementById('btnSystem').textContent='🔊 오디오 캡처';
-      document.getElementById('btnMic').textContent='🎤 마이크';
+      if (captureStream) { captureStream.getTracks().forEach(t => t.stop()); captureStream = null; }
+      document.getElementById('btnStop').style.display = 'none';
+      log('캡처 중지');
     }
 
-    function loadVideo(id){
-      document.getElementById('playerWrapper').innerHTML=
-        `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1" allow="autoplay; encrypted-media; microphone" allowfullscreen></iframe>`;
-      log(`YouTube 로드: ${id}`);
-      log('"오디오 캡처" 눌러서 코드 분석 시작', 'warn');
-    }
+    // ══════════════════════════════════════════════════════
+    // UI 이벤트
+    // ══════════════════════════════════════════════════════
 
-    document.getElementById('btnLoad').addEventListener('click',()=>{
-      const url=document.getElementById('urlInput').value.trim();
-      if(!url){log('URL을 입력하세요','warn');return;}
-      const id=extractId(url);
-      if(!id){log('유효한 YouTube URL이 아닙니다','error');return;}
-      loadVideo(id);
+    // 탭 전환
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab' + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1)).classList.add('active');
+      });
     });
-    document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btnLoad').click();});
-    document.querySelectorAll('.preset-btn').forEach(b=>b.addEventListener('click',()=>{
-      const id=b.dataset.id;
-      document.getElementById('urlInput').value=`https://www.youtube.com/watch?v=${id}`;
-      loadVideo(id);
+
+    // 파일 업로드
+    const fileDrop = document.getElementById('fileDrop');
+    const fileInput = document.getElementById('fileInput');
+    fileDrop.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+    fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.classList.add('dragover'); });
+    fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
+    fileDrop.addEventListener('drop', (e) => {
+      e.preventDefault(); fileDrop.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+
+    // YouTube
+    function extractId(url) { const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/); return m ? m[1] : null; }
+    document.getElementById('btnLoad').addEventListener('click', () => {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+      const id = extractId(url);
+      if (!id) { log('유효한 YouTube URL이 아닙니다', 'error'); return; }
+      const wrapper = document.getElementById('playerWrapper');
+      wrapper.className = 'player-wrapper';
+      wrapper.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1&enablejsapi=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+      log(`YouTube 로드: ${id}`, 'warn');
+      log('"실시간" 탭에서 오디오 캡처로 분석 가능', 'warn');
+    });
+    document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => {
+      document.getElementById('urlInput').value = `https://www.youtube.com/watch?v=${b.dataset.id}`;
+      document.getElementById('btnLoad').click();
     }));
 
-    document.getElementById('btnSystem').addEventListener('click',()=>{
-      if(isAnalyzing){stopAnalysis();log('분석 중지');}
-      else startSystemAudio();
+    // 실시간 캡처
+    document.getElementById('btnSystem').addEventListener('click', () => startCapture('system'));
+    document.getElementById('btnMic').addEventListener('click', () => startCapture('mic'));
+    document.getElementById('btnStop').addEventListener('click', stopCapture);
+
+    // BPM
+    document.getElementById('bpmDn').addEventListener('click', () => {
+      offlineBPM = Math.max(30, offlineBPM - 5);
+      document.getElementById('bpmVal').textContent = offlineBPM;
+      log(`BPM: ${offlineBPM}`, 'warn');
     });
-    document.getElementById('btnMic').addEventListener('click',()=>{
-      if(isAnalyzing){stopAnalysis();log('분석 중지');}
-      else startMic();
+    document.getElementById('bpmUp').addEventListener('click', () => {
+      offlineBPM = Math.min(300, offlineBPM + 5);
+      document.getElementById('bpmVal').textContent = offlineBPM;
+      log(`BPM: ${offlineBPM}`, 'warn');
     });
 
-    let metroInt=null,beat=0;
-    function tick(){
-      beat=(beat%4)+1;
-      for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.toggle('on',i===beat);
-      const c=new AudioContext(),o=c.createOscillator(),g=c.createGain();
-      o.frequency.value=beat===1?1000:800;g.gain.value=0.06;
-      o.connect(g);g.connect(c.destination);o.start();
-      g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.04);o.stop(c.currentTime+0.04);
-    }
-    document.getElementById('btnMetro').addEventListener('click',()=>{
-      if(metroInt){clearInterval(metroInt);metroInt=null;document.getElementById('btnMetro').textContent='▶ 메트로놈';
-        for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.remove('on');beat=0;}
-      else{metroInt=setInterval(tick,60000/bpm);document.getElementById('btnMetro').textContent='⏸ 정지';log(`메트로놈 ${bpm} BPM`);}
-    });
-    document.getElementById('bpmDn').addEventListener('click',()=>{bpm=Math.max(30,bpm-5);bpmLocked=true;document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}log(`BPM 수동: ${bpm} (자동감지 잠금)`,'warn');});
-    document.getElementById('bpmUp').addEventListener('click',()=>{bpm=Math.min(300,bpm+5);bpmLocked=true;document.getElementById('bpmVal').textContent=bpm;if(metroInt){clearInterval(metroInt);metroInt=setInterval(tick,60000/bpm);}log(`BPM 수동: ${bpm} (자동감지 잠금)`,'warn');});
-
-    let ws=null,currentRoom=null;const userId='user_'+Math.random().toString(36).slice(2,8);
-    function connectWS(){
-      return new Promise((res,rej)=>{
-        ws=new WebSocket('ws://localhost:8765');
-        ws.onopen=()=>{document.getElementById('syncDot').classList.add('on');document.getElementById('syncLabel').textContent='연결됨';document.getElementById('syncBadge').classList.add('connected');log('WebSocket 연결됨');res();};
-        ws.onmessage=e=>{const m=JSON.parse(e.data);
-          if(m.type==='room_joined'){currentRoom=m.roomCode;bpm=m.bpm;document.getElementById('bpmVal').textContent=bpm;document.getElementById('syncLabel').textContent=`방 ${m.roomCode} (${m.users.length}명)`;log(`방 ${m.roomCode} — ${m.users.length}명`);renderUsers(m.users);}
-          else if(m.type==='user_joined'||m.type==='user_left'){document.getElementById('syncLabel').textContent=`방 ${currentRoom} (${m.users.length}명)`;renderUsers(m.users);}
-          else if(m.type==='bpm_update'){bpm=m.bpm;document.getElementById('bpmVal').textContent=bpm;}
-          else if(m.type==='tick'){beat=m.beat;for(let i=1;i<=4;i++)document.getElementById('md'+i).classList.toggle('on',i===beat);}
-          else if(m.type==='error')log(m.message,'error');
-        };
-        ws.onclose=()=>{document.getElementById('syncDot').classList.remove('on');document.getElementById('syncBadge').classList.remove('connected');document.getElementById('syncLabel').textContent='끊김';currentRoom=null;};
-        ws.onerror=()=>{log('WebSocket 연결 실패','error');rej();};
-      });
-    }
-    function renderUsers(u){document.getElementById('usersList').innerHTML=u.map(x=>`<div class="user-chip ${x.isHost?'host':''}">${x.isHost?'👑 ':''}${x.nickname}</div>`).join('');}
-    document.getElementById('btnCreate').addEventListener('click',async()=>{try{if(!ws||ws.readyState!==1)await connectWS();const c=Math.random().toString(36).slice(2,8).toUpperCase();document.getElementById('roomInput').value=c;ws.send(JSON.stringify({type:'create_room',roomCode:c,userId,nickname:userId}));}catch{}});
-    document.getElementById('btnJoin').addEventListener('click',async()=>{const c=document.getElementById('roomInput').value.trim();if(!c){log('방 코드를 입력하세요','warn');return;}try{if(!ws||ws.readyState!==1)await connectWS();ws.send(JSON.stringify({type:'join_room',roomCode:c,userId,nickname:userId}));}catch{}});
-
+    // 초기화
     loadEssentia();
-    log('SyncChord v7 — 36-bin HPCP + Key(tonictriad)');
+    log('SyncChord v8 — 오프라인 분석 (Chordify 방식)');
+    log('오디오 파일을 업로드하면 전체를 일괄 분석합니다');
+
+    // Tab ID 매핑 수정
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        const tabName = btn.dataset.tab;
+        const tabId = tabName === 'file' ? 'tabFile' : tabName === 'youtube' ? 'tabYoutube' : 'tabLive';
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
   </script>
 </body>
 </html>
