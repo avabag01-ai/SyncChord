@@ -376,6 +376,25 @@
     <div class="bar-numbers" id="barNumbers"></div>
   </div>
 
+  <!-- HPCP 시각화 -->
+  <div style="display:flex;gap:3px;align-items:flex-end;height:50px;max-width:900px;width:100%;padding:4px 12px;background:#1a1a2e;border-radius:6px;margin-bottom:8px">
+    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="A"></div>
+    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="Bb"></div>
+    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="B"></div>
+    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="C"></div>
+    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="C#"></div>
+    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="D"></div>
+    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="Eb"></div>
+    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="E"></div>
+    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="F"></div>
+    <div class="hpcp-bar" style="flex:1;background:#ff6b35;border-radius:2px;height:2px;transition:height 0.1s" title="F#"></div>
+    <div class="hpcp-bar" style="flex:1;background:#f7c948;border-radius:2px;height:2px;transition:height 0.1s" title="G"></div>
+    <div class="hpcp-bar" style="flex:1;background:#4ecdc4;border-radius:2px;height:2px;transition:height 0.1s" title="Ab"></div>
+    <div style="display:flex;flex-direction:column;gap:1px;font-size:8px;color:#666;margin-left:4px">
+      <span>HPCP</span><span>36bin</span>
+    </div>
+  </div>
+
   <div class="bottom-panel">
     <div class="panel-card">
       <h3>🎛 컨트롤</h3>
@@ -443,58 +462,28 @@
     }
 
     // ══════════════════════════════════════════════════════════════
-    // 코드 템플릿 매칭 (Essentia HPCP 기준: bin 0 = A)
-    // ★ 핵심: HPCP[0]=A, [1]=Bb, [2]=B, [3]=C, ... [11]=Ab
-    //   → C-based 인덱스를 A-based로 변환: +3 offset
+    // Essentia 기본 파이프라인 v7
+    // HPCP 36-bin (기본값) → Key(tonictriad, pcpSize=36)
+    // ★ 이전 버그: 12-bin HPCP를 pcpSize=36 Key에 넣음 → 프로파일 불일치
     // ══════════════════════════════════════════════════════════════
-    // C-based 음이름 (인덱스 0=C)
-    const NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
-    // HPCP offset: C(note idx 0) → HPCP bin 3
-    const HPCP_A_OFFSET = 3;
-
-    const CHORD_TYPES = {
-      '':      [0,4,7],         // major triad
-      'm':     [0,3,7],         // minor triad
-      '7':     [0,4,7,10],      // dominant 7
-      'm7':    [0,3,7,10],      // minor 7
-      'dim':   [0,3,6],         // diminished
-      'sus4':  [0,5,7],         // sus4
-      '7sus4': [0,5,7,10],      // dominant 7 sus4
-      'maj7':  [0,4,7,11],      // major 7
-    };
-
-    const CHORD_TEMPLATES = [];
-    for(let root = 0; root < 12; root++){
-      for(const [suffix, intervals] of Object.entries(CHORD_TYPES)){
-        const tpl = new Float32Array(12);
-        for(let i = 0; i < intervals.length; i++){
-          // ★ C-based → A-based HPCP 변환 (+3)
-          const hpcpBin = (root + intervals[i] + HPCP_A_OFFSET) % 12;
-          tpl[hpcpBin] = i === 0 ? 1.0 : i < 2 ? 0.7 : 0.5;
-        }
-        const mx = Math.max(...tpl);
-        if(mx > 0) for(let k = 0; k < 12; k++) tpl[k] /= mx;
-
-        CHORD_TEMPLATES.push({
-          name: NOTE_NAMES[root] + suffix,
-          root, tpl,
-          nNotes: intervals.length
-        });
-      }
-    }
-
-    function cosineSim(a, b){
-      let dot=0, na=0, nb=0;
-      for(let i=0;i<12;i++){ dot+=a[i]*b[i]; na+=a[i]*a[i]; nb+=b[i]*b[i]; }
-      return dot / (Math.sqrt(na*nb) + 1e-10);
-    }
-
-    // ── Essentia HPCP → 코드 매칭 ──
-    const HPCP_WINDOW = 4; // ~370ms 평균
+    const HPCP_SIZE = 36; // Key 기본 pcpSize=36에 맞춤
+    const HPCP_WINDOW = 6; // ~560ms 평균 (ChordsDetection 기본 2초보다 짧게)
     let hpcpBuf = [];
     let stableChord = '-';
     let stableCount = 0;
     let frameCount = 0;
+
+    // HPCP 시각화 업데이트
+    function updateHpcpViz(hpcp36){
+      const bars = document.querySelectorAll('.hpcp-bar');
+      if(!bars.length) return;
+      // 36bin → 12 semitone (최대값 추출)
+      for(let i = 0; i < 12; i++){
+        const v = Math.max(hpcp36[i*3], hpcp36[i*3+1], hpcp36[i*3+2]);
+        bars[i].style.height = Math.max(2, v * 40) + 'px';
+        bars[i].style.opacity = 0.3 + v * 0.7;
+      }
+    }
 
     function essentiaChordDetect(timeDomainData, sampleRate) {
       if (!essentiaReady || !essentia) return { chord: '-', confidence: 0 };
@@ -504,66 +493,94 @@
         const inputVec = essentia.arrayToVector(timeDomainData);
         toDelete.push(inputVec);
 
+        // Windowing (hann, Essentia 기본)
         const windowed = essentia.Windowing(inputVec, true, FRAME_SIZE, 'hann', 0, true);
         toDelete.push(windowed.frame);
 
+        // Spectrum
         const spectrum = essentia.Spectrum(windowed.frame, FRAME_SIZE);
         toDelete.push(spectrum.spectrum);
 
+        // SpectralPeaks
         const peaks = essentia.SpectralPeaks(spectrum.spectrum,
           0.00001, 5000, 60, 40, 'magnitude', sampleRate);
         toDelete.push(peaks.frequencies, peaks.magnitudes);
 
-        // Essentia HPCP — 12차원, A=bin0 기준
+        // ★ HPCP 36-bin (Essentia Key 기본값에 맞춤, A=bin0)
         const hpcp = essentia.HPCP(peaks.frequencies, peaks.magnitudes,
-          true, 500, 4, 5000, false, 40, false, 'unitMax', 440, sampleRate, 12, 'squaredCosine', 1);
+          true,     // bandPreset
+          500,      // bandSplitFrequency
+          0,        // harmonics (기본값 0)
+          5000,     // maxFrequency
+          false,    // maxShifted
+          40,       // minFrequency
+          false,    // nonLinear
+          'unitMax',// normalized
+          440,      // referenceFrequency
+          sampleRate,
+          HPCP_SIZE,// ★ size=36 (Key 기본값과 일치)
+          'squaredCosine',
+          1);
         toDelete.push(hpcp.hpcp);
 
         const hpcpArr = essentia.vectorToArray(hpcp.hpcp);
 
-        // 프레임 버퍼 (짧은 윈도우)
+        // HPCP 시각화
+        updateHpcpViz(hpcpArr);
+
+        // 프레임 버퍼 평균
         hpcpBuf.push(Array.from(hpcpArr));
-        if (hpcpBuf.length > HPCP_WINDOW) hpcpBuf.shift();
+        if(hpcpBuf.length > HPCP_WINDOW) hpcpBuf.shift();
 
-        // 평균 HPCP
-        const avg = new Float32Array(12);
-        for(const f of hpcpBuf) for(let i=0;i<12;i++) avg[i] += f[i];
-        for(let i=0;i<12;i++) avg[i] /= hpcpBuf.length;
-        const mx = Math.max(...avg, 1e-6);
-        for(let i=0;i<12;i++) avg[i] /= mx;
+        const avg = new Float32Array(HPCP_SIZE);
+        for(const f of hpcpBuf) for(let i=0;i<HPCP_SIZE;i++) avg[i] += f[i];
+        for(let i=0;i<HPCP_SIZE;i++) avg[i] /= hpcpBuf.length;
 
-        // 템플릿 매칭
-        let bestChord = '-', bestScore = -1;
-        for(const t of CHORD_TEMPLATES){
-          let s = cosineSim(avg, t.tpl);
-          if(t.nNotes >= 4) s += 0.015; // 7th 코드 약간 보너스
-          if(s > bestScore){ bestScore = s; bestChord = t.name; }
-        }
-        const confidence = Math.max(0, Math.min(1, bestScore));
+        // ★ Key 알고리즘 — Essentia 기본 설정
+        // pcpSize=36, profileType='tonictriad' (ChordsDetection과 동일)
+        const avgVec = essentia.arrayToVector(avg);
+        toDelete.push(avgVec);
 
-        // 디버그: 매 20프레임마다 HPCP 로그
+        const keyResult = essentia.Key(avgVec,
+          4,             // numHarmonics
+          HPCP_SIZE,     // ★ pcpSize=36 (기본값!)
+          'tonictriad',  // profileType (ChordsDetection 기본)
+          0.6,           // slope
+          false,         // useMajMin
+          false,         // usePolyphony
+          false          // useThreeChords
+        );
+
+        const chordName = keyResult.scale === 'minor'
+          ? keyResult.key + 'm' : keyResult.key;
+        const confidence = Math.max(0, Math.min(1, keyResult.strength));
+
+        // 디버그 로그 (20프레임마다)
         frameCount++;
-        if(frameCount % 20 === 0){
+        if(frameCount % 15 === 0){
           const binNames = ['A','Bb','B','C','C#','D','Eb','E','F','F#','G','Ab'];
-          const top3 = [...avg].map((v,i) => ({n:binNames[i],v}))
-            .sort((a,b) => b.v - a.v).slice(0,3)
-            .map(x => `${x.n}:${x.v.toFixed(2)}`).join(' ');
-          console.log(`[HPCP] ${top3} → ${bestChord} (${bestScore.toFixed(3)})`);
+          // 36→12 요약
+          const s12 = new Float32Array(12);
+          for(let i=0;i<36;i++) s12[Math.floor(i/3)] = Math.max(s12[Math.floor(i/3)], avg[i]);
+          const top3 = [...s12].map((v,i)=>({n:binNames[i],v}))
+            .sort((a,b)=>b.v-a.v).slice(0,3)
+            .map(x=>`${x.n}:${x.v.toFixed(2)}`).join(' ');
+          log(`HPCP [${top3}] → ${chordName} (${(confidence*100).toFixed(0)}%)`);
         }
 
-        // 히스테리시스: 2회 연속 달라야 전환
-        if(bestChord !== stableChord){
+        // 히스테리시스: 2회 연속 다르면 전환
+        if(chordName !== stableChord){
           stableCount++;
           if(stableCount < 2 && stableChord !== '-'){
             return { chord: stableChord, confidence: confidence * 0.85 };
           }
-          stableChord = bestChord;
+          stableChord = chordName;
           stableCount = 0;
         } else {
           stableCount = 0;
         }
 
-        return { chord: bestChord, confidence };
+        return { chord: chordName, confidence };
       } catch(e) {
         console.error('Essentia error:', e);
         return { chord: '-', confidence: 0 };
@@ -867,6 +884,7 @@
       beatTimeline = []; voteBuffer = []; energyHistory = []; onsetTimes = [];
       prevSpectrum = null; beatPhaseOffset = 0; liveChord = '-';
       hpcpBuf = []; stableChord = '-'; stableCount = 0; frameCount = 0;
+      document.querySelectorAll('.hpcp-bar').forEach(b => b.style.height = '2px');
     }
 
     async function startSystemAudio(){
@@ -992,7 +1010,7 @@
     document.getElementById('btnJoin').addEventListener('click',async()=>{const c=document.getElementById('roomInput').value.trim();if(!c){log('방 코드를 입력하세요','warn');return;}try{if(!ws||ws.readyState!==1)await connectWS();ws.send(JSON.stringify({type:'join_room',roomCode:c,userId,nickname:userId}));}catch{}});
 
     loadEssentia();
-    log('SyncChord v6 — HPCP offset 수정 (A=bin0)');
+    log('SyncChord v7 — 36-bin HPCP + Key(tonictriad)');
   </script>
 </body>
 </html>
